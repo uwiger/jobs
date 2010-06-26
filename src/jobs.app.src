@@ -1,0 +1,8 @@
+%% -*- erlang -*-
+{application, jobs,
+ [
+  {description, "Job scheduler"},
+  {applications, [kernel, stdlib, gproc]},
+  {mod, {jobs_app, []}},
+  {env, []}
+ ]}.
