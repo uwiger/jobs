@@ -29,8 +29,9 @@
 -author('ulf.wiger@erlang-solutions.com').
 -copyright('Erlang Solutions Ltd.').
 
--export([new/1]).
--export([in/2, in/3,
+-export([new/2,
+         delete/1]).
+-export([in/3,
          out/2,
          info/2,
          all/1,
@@ -41,38 +42,92 @@
 -include("jobs.hrl").
 -import(jobs_lib, [timestamp/0]).
 
+-record(st, {table}).
 
-new(Options) ->
-    Name = proplists:get_value(name, Options, undefined),
+%-type timestamp() :: integer().
+-type job()       :: {pid(), reference()}.
+-type entry()     :: {timestamp(), job()}.
+
+
+new(Options, Q) ->
     case proplists:get_value(type, Options, fifo) of
         {producer, F} ->
-            #q{name = Name,
-               type = {producer, F}};
+            Q#q{type = {producer, F}};
         fifo ->
-            [MaxTime, MaxSize] =
-                [proplists:get_value(K,Options,Def) || 
-                    {K, Def} <- [{max_time, undefined},
-                                 {max_size, undefined}]],
             Tab = ets:new(?MODULE, [ordered_set]),
-            #q{name = Name,
-               max_time = MaxTime,
-               max_size = MaxSize,
-               table = Tab}
+            #q{st = #st{table = Tab}}
     end.
 
 
-in(Job, Q) ->
-    in(timestamp(), Job, Q).
+delete(#q{st = #st{table = T}}) ->
+    ets:delete(T).
 
-in(TS, Job, #q{table = Tab, oldest_job = OJ} = Q) ->
+
+%% in(Job, Q) ->
+%%     in(timestamp(), Job, Q).
+
+
+-spec in(timestamp(), job(), #q{}) -> #q{}.
+%%
+%% Enqueue a job reference; return the updated queue
+%%
+in(TS, Job, #q{st = #st{table = Tab}, oldest_job = OJ} = Q) ->
     OJ1 = erlang:min(TS, OJ),    % Works even if OJ==undefined
     ets:insert(Tab, {{TS, Job}}),
     Q#q{oldest_job = OJ1}.
 
 
-
-out(N,#q{table = T}=Q) when N >= 0 ->
+-spec out(N :: integer(), #q{}) -> {[entry()], #q{}}.
+%%
+%% Dequeue a batch of N jobs; return the modified queue.
+%%
+out(N,#q{st = #st{table = T}}=Q) when N >= 0 ->
     {out1(N, T), set_oldest_job(Q)}.
+
+
+-spec all(#q{}) -> [entry()].
+%%
+%% Return all the job entries in the queue
+%%
+all(#q{st = #st{table = T}}) ->
+    ets:select(T, [{{'$1'},[],['$1']}]).
+
+
+-type info_item() :: max_time | oldest_job | length.
+
+-spec info(info_item(), #q{}) -> any().
+%%
+%% Return information about the queue.
+%%
+info(max_time  , #q{max_time = T}   ) -> T;
+info(oldest_job, #q{oldest_job = OJ}) -> OJ;
+info(length    , #q{st = #st{table = Tab}}) ->
+    ets:info(Tab, size).
+    
+-spec timedout(#q{}) -> [entry()].
+%%
+%% Return all entries that have been in the queue longer than MaxTime.
+%%
+timedout(#q{max_time = undefined}) -> [];
+timedout(#q{max_time = TO} = Q) ->
+    timedout(TO, Q).
+
+timedout(_ , #q{oldest_job = undefined}) -> [];
+timedout(TO, #q{st = #st{table = Tab}} = Q) ->
+    Now = timestamp(),
+    {Objs, OJ} = find_expired(Tab, Now, TO),
+    {Objs, Q#q{oldest_job = OJ}}.
+
+
+
+-spec is_empty(#q{}) -> boolean().
+%%
+%% Check whether the queue is empty.
+%%
+is_empty(#q{type = {producer, _}}) -> false;
+is_empty(#q{oldest_job = undefined}) -> true;
+is_empty(#q{}) ->
+    false.
 
 
 out1(0, _Tab) -> [];
@@ -98,7 +153,7 @@ out1(N, Tab) when N > 0 ->
             Keys
     end.
 
-set_oldest_job(#q{table = Tab} = Q) ->
+set_oldest_job(#q{st = #st{table = Tab}} = Q) ->
     OJ = case ets:first(Tab) of
              '$end_of_table' ->
                  undefined;
@@ -107,27 +162,6 @@ set_oldest_job(#q{table = Tab} = Q) ->
          end,
     Q#q{oldest_job = OJ}.
             
-
-all(#q{table = T}) ->
-    ets:select(T, [{{'$1'},[],['$1']}]).
-
-
-info(max_time, #q{max_time = T}) -> T;
-info(oldest_job, #q{oldest_job = OJ}) -> OJ;
-info(length, #q{table = Tab}) ->
-    ets:info(Tab, size).
-    
-
-
-timedout(#q{max_time   = undefined}) -> [];
-timedout(#q{max_time = TO} = Q) ->
-    timedout(TO, Q).
-
-timedout(_, #q{oldest_job = undefined}) -> [];
-timedout(TO, #q{table = Tab} = Q) ->
-    Now = timestamp(),
-    {Objs, OJ} = find_expired(Tab, Now, TO),
-    {Objs, Q#q{oldest_job = OJ}}.
 
 find_expired(Tab, Now, TO) ->
     find_expired(ets:last(Tab), Tab, Now, TO, [], undefined).
@@ -144,15 +178,10 @@ find_expired({TS, _} = Key, Tab, Now, TO, Acc, _OJ) ->
 	    {Acc, TS}
     end.
 
-empty(#q{table = T} = Q) ->
+empty(#q{st = #st{table = T}} = Q) ->
     ets:delete_all_objects(T),
     Q#q{oldest_job = undefined}.
 
-is_empty(#q{type = {producer, _}}) -> false;
-is_empty(#q{oldest_job = undefined}) -> true;
-is_empty(#q{}) ->
-    false.
-    
 
 is_expired(TS, Now, TO) ->
     MS = Now - TS,

@@ -32,7 +32,7 @@
          run/1, run/2,
          done/1]).
 
--export([set_dampers/1]).
+-export([set_modifiers/1]).
 
 %% Config API
 -export([add_queue/2,
@@ -72,32 +72,42 @@
 -import(proplists, [get_value/3]).
 
 -include("jobs.hrl").
--record(state, {queues      = []  :: [#q{}],
-                group_rates = []  :: [#grp{}],
-                counters    = []  :: [#cr{}],  
-                default_queue,
-                interval    = 50  :: integer()}).
+-record(st, {queues      = []  :: [#q{}],
+	     group_rates = []  :: [#grp{}],
+	     counters    = []  :: [#cr{}],  
+	     q_select          :: atom(),
+	     q_select_st       :: any(),
+	     default_queue,
+	     interval    = 50  :: integer(),
+	     info_f}).
 
-
--define(COUNTER(Name), {c,l,{?MODULE,Name}}).
--define(   AGGR(Name), {a,l,{?MODULE,Name}}).
-
--define(COUNTER_SAMPLE_INTERVAL, 20000).
 
 -define(SERVER, ?MODULE).
 
 -include_lib("eunit/include/eunit.hrl").
 
+-opaque counter() :: {any(), any()}.
+-type queue_options() :: list().
+-type queue_name() :: any().
+-type info_category() :: queues | group_rates | counters.
 
+-spec ask() -> {ok, any()} | {error, rejected | timeout}.
+%%
 ask() ->
     ask(default).
 
+
+-spec ask(atom()) -> {ok, reg_obj()} | {error, rejected | timeout}.
+%%
 ask(Type) ->
     case call(?SERVER, {ask, Type, timestamp()}, infinity) of
         {ok, Counters} ->
             [try gproc:reg(?COUNTER(C), V)
              catch
                  error:badarg ->
+		     %% failure might mean that we have these counters
+		     %% already. Let's try to increment the counters instead;
+		     %% if that doesn't work, the call will fail.
                      gproc:update_counter({c,l,C},V)
              end || {C,V} <- Counters],
             {ok, Counters};
@@ -105,10 +115,13 @@ ask(Type) ->
             Other
     end.
 
-
+-spec run(fun(() -> X)) -> X.
+%%
 run(Fun) when is_function(Fun, 0) ->
     run(undefined, Fun).
 
+-spec run(job_class(), fun(() -> X)) -> X.
+%%
 run(Type, Fun) when is_function(Fun, 0) ->
     case ask(Type) of
         {ok, Opaque} ->
@@ -120,17 +133,22 @@ run(Type, Fun) when is_function(Fun, 0) ->
             erlang:error(Reason)
     end.
 
+-spec done(reg_obj()) -> ok.
+%%
 done(Counters) ->
-    [gproc:unreg(?COUNTER(C)) || {C,_} <- Counters],
+    [catch gproc:unreg(?COUNTER(C)) || {C,_} <- Counters],
     ok.
 
-
+-spec add_queue(queue_name(), [option()]) -> ok.
+%%		       
 add_queue(Name, Options) ->
     call(?SERVER, {add_queue, Name, Options}).
 
+-spec delete_queue(queue_name()) -> ok.
 delete_queue(Name) ->
     call(?SERVER, {delete_queue, Name}).
 
+-spec info(info_category()) -> [any()].
 info(Item) ->
     call(?SERVER, {info, Item}).
 
@@ -162,14 +180,14 @@ delete_counter(Name) ->
 
 %% Sampler API
 %%
-set_dampers(Dampers) ->
-    call(?SERVER, {set_dampers, Dampers}).
+set_modifiers(Modifiers) ->
+    call(?SERVER, {set_modifiers, Modifiers}).
 
 
 %% Client-side call function
 %%
 call(Server, Req) ->
-    call(Server, Req, 10000).
+    call(Server, Req, infinity).
 
 call(Server, Req, Timeout) ->
     case gen_server:call(Server, Req, Timeout) of
@@ -198,6 +216,8 @@ timeout(From) ->
 
 %% start function
 
+-spec start_link() -> {ok, pid()}.
+%%
 start_link() ->
     Opts = case application:get_env(options) of
                {ok, O} when is_list(O) ->
@@ -207,29 +227,33 @@ start_link() ->
 	   end,
     start_link(Opts).
 
+-spec start_link([option()]) -> {ok, pid()}.
+%%
 start_link(Opts) when is_list(Opts) ->
     gen_server:start_link({local,?MODULE}, ?MODULE, Opts, []).
 
 %% Server-side callbacks and helpers
 
-
-standard_dampers() ->
+-spec standard_modifiers() -> [q_modifier()].
+%%
+standard_modifiers() ->
     [{cpu, 10},
      {memory, 10}].
 
-
+-spec init([option()]) -> {ok, #st{}}.
+%%
 init(Opts) ->
     process_flag(priority,high),
-    S0 = #state{},
+    S0 = #st{},
     [Qs, Gs, Cs, Interval] =
 	[get_value(K,Opts,Def) 
-	 || {K,Def} <- [{queues      , [{default,[]}]},
+	 || {K,Def} <- [{queues     , [{default,[]}]},
 			{group_rates, []},
-			{counters    , []},
-			{interval    , S0#state.interval}]],
+			{counters   , []},
+			{interval   , S0#st.interval}]],
     Groups = init_groups(Gs),
     Counters = init_counters(Cs),
-    S1 = S0#state{group_rates = Groups,
+    S1 = S0#st{group_rates = Groups,
                   counters    = Counters},
     Queues = init_queues(Qs, S1),
     Default0 = case Queues of
@@ -239,25 +263,27 @@ init(Opts) ->
                        N
                end,
     Default = get_value(default_queue, Opts, Default0),
-    {ok, S1#state{queues        = Queues,
-                  default_queue = Default,
-                  interval      = Interval}}.
+    {ok, set_info(S1#st{queues        = Queues,
+                           default_queue = Default,
+                           interval      = Interval})}.
+
+
 
 init_queues(Qs, S) ->
     lists:map(fun(Q) -> init_queue(Q,S) end, Qs).
 
-init_queue({Name, standard_rate, R}, S) ->
+init_queue({Name, standard_rate, R}, S) when is_integer(R), R > 0 ->
     init_queue({Name, [{regulators,
                         [{rate,
                           [{limit, R},
-                           {dampers, standard_dampers()}]
+                           {modifiers, standard_modifiers()}]
                          }]
                        }]}, S);
-init_queue({Name, standard_counter, N}, S) ->
+init_queue({Name, standard_counter, N}, S) when is_integer(N), N > 0 ->
     init_queue({Name, [{regulators,
                         [{counter,
                           [{limit, N},
-                           {dampers, standard_dampers()}]
+                           {modifiers, standard_modifiers()}]
                          }]
                        }]}, S);
 init_queue({Name, Opts}, S) ->
@@ -265,7 +291,7 @@ init_queue({Name, Opts}, S) ->
         [get_value(K,Opts,D) ||
             {K, D} <- [{check_interval,undefined},
                        {regulators, []}]],
-    Q0 = jobs_queue:new([{name,Name}|Opts]),
+    Q0 = q_new([{name,Name}|Opts]),
     Q1 = init_regulators(Regs, Q0#q{check_interval = ChkI}),
     calculate_check_interval(Q1, S).
 
@@ -292,11 +318,11 @@ init_groups(Gs) ->
 init_group(Opts, G) ->
     R = #rate{},
     Limit = get_value(limit, Opts, R#rate.limit),
-    Dampers = get_value(dampers, Opts, R#rate.dampers),
+    Modifiers = get_value(modifiers, Opts, R#rate.modifiers),
     Interval = interval(Limit),
     G#grp{rate = #rate{limit = Limit,
 		       preset_limit = Limit,
-		       dampers = Dampers,
+		       modifiers = Modifiers,
 		       interval = Interval}}.
 
 init_counters(Cs) ->
@@ -319,9 +345,9 @@ init_regulators(Rs, #q{name = Qname} = Q) ->
 			Name = get_value(name, Opts, CR0#cr.name),
 			{init_counter(Opts, CR0#cr{name = Name}), {Rx,Cx+1}};
 		   ({group_rate, R} = Link, Acc) when is_atom(R) ->
-			{Link, Acc};
-		   ({counter, R} = Link, Acc) when is_atom(R) ->
 			{Link, Acc}
+		   %% ({counter, R} = Link, Acc) when is_atom(R) ->
+		   %% 	{Link, Acc}
 		end, {1,1}, Rs),
     case [RR || #rr{} = RR <- Rs1] of
         [_,_|_] = Multiples ->
@@ -332,17 +358,17 @@ init_regulators(Rs, #q{name = Qname} = Q) ->
     Q#q{regulators = Rs1}.
 
 init_rate_regulator(Opts, #rr{rate = R} = RR) ->
-    [Limit,Dampers,Name] =
+    [Limit,Modifiers,Name] =
         [get_value(K,Opts,D) ||
             {K,D} <- [{limit  , R#rate.limit},
-                      {dampers, R#rate.dampers},
+                      {modifiers, R#rate.modifiers},
                       {name   , RR#rr.name}]],
     Interval = interval(Limit),
     RR#rr{name = Name,
           rate = #rate{limit = Limit,
                        interval = Interval,
                        preset_limit = Limit,
-                       dampers = Dampers}}.
+                       modifiers = Modifiers}}.
 
 
 init_counter(Opts) ->
@@ -352,67 +378,88 @@ init_counter(Opts, #cr{name = Name} = CR0) ->
     R = #rate{},
     Limit = get_value(limit, Opts, R#rate.limit),
     Interval = get_value(interval, Opts, ?COUNTER_SAMPLE_INTERVAL),
-    Dampers = get_value(dampers, Opts, R#rate.dampers),
-    gproc:reg(?AGGR(Name)),
+    Modifiers = get_value(modifiers, Opts, R#rate.modifiers),
+    case gproc:where(?AGGR(Name)) of
+	P when P == self() ->
+	    ok;  % ok to reuse an aggregated counter
+	undefined ->
+	    gproc:reg(?AGGR(Name))
+    end,
     CR0#cr{rate = #rate{limit = Limit,
 			interval = Interval,
 			preset_limit = Limit,
-			dampers = Dampers}}.
+			modifiers = Modifiers}}.
 
 
+-spec interval(integer()) -> undefined | integer().
+%%
+%% Return the sampling interval (in us) based on max frequency.
+%% If max frequency is 0, we choose what corresponds to an unlimited interval
+%%
 interval(0    ) -> undefined;  % greater than any int()
 interval(Limit) -> 1000000 div Limit.
 
 
+set_info(S) ->
+    S#st{info_f = fun(Q) ->
+                          %% We need to clear the info_f attribute, to 
+                          %% avoid recursively inheriting all previous states.
+                          get_info(Q, S#st{info_f = undefined})
+                  end}.
 
 
 %% Gen_server callbacks
+handle_call(Req, From, S) ->
+    try i_handle_call(Req, From, S) of
+        {noreply, S1} ->
+            {noreply, set_info(S1)};
+        {reply, R, S1} ->
+            {reply, R, set_info(S1)};
+        Other ->
+            Other
+    catch
+        error:Reason ->
+            error_report([{error, Reason},
+                          {request, Req}]),
+            {reply, badarg, S}
+    end.
 
-handle_call({ask, Type, TS}, From, #state{queues = Qs} = S) ->
-    Qname = if Type == undefined ->
-                    S#state.default_queue;
-               true ->
-                    Type
-            end,
+i_handle_call({ask, Type, TS}, From, #st{queues = Qs} = S) ->
+    {Qname, S1} = select_queue(Type, TS, S),
     case get_queue(Qname, Qs) of
         #action{type = Type} ->
             case Type of
                 approve -> approve(From, []);
                 reject  -> reject(From)
-            end;
+            end,
+            {noreply, S1};
         #q{} = Q ->
-            {noreply, queue_job(TS, From, Q, S)};
+            {noreply, queue_job(TS, From, Q, S1)};
         false ->
-            {reply, badarg, S}
+            {reply, badarg, S1}
     end;
-handle_call({add_queue, Name, Options} = Req, _, #state{queues = Qs} = S) ->
-    try false = get_queue(Name, Qs),
-        NewQueues = init_queues([{Name, Options}], S),
-        {reply, ok, S#state{queues = Qs ++ NewQueues}}
-    catch
-        error:Reason ->
-            error_logger:error_report([{error, Reason},
-                                       {request, Req}]),
-            {reply, badarg, S}
-    end;
-handle_call({delete_queue, Name}, _, #state{queues = Qs} = S) ->
+i_handle_call({add_queue, Name, Options}, _, #st{queues = Qs} = S) ->
+    false = get_queue(Name, Qs),
+    NewQueues = init_queues([{Name, Options}], S),
+    {reply, ok, S#st{queues = Qs ++ NewQueues}};
+i_handle_call({delete_queue, Name}, _, #st{queues = Qs} = S) ->
     case get_queue(Name, Qs) of
         false ->
             {reply, false, S};
         #action{} = A ->
-            {reply, true, S#state{queues = Qs -- [A]}};
-        #q{table = T} = Q ->
+            {reply, true, S#st{queues = Qs -- [A]}};
+        #q{} = Q ->
             %% for now, let's be very brutal
-            [reject(Client) || {_, Client} = jobs_queue:all(Q)],
-            ets:delete(T),
-            {reply, true, S#state{queues = lists:keydelete(Name,#q.name,Qs)}}
+            [reject(Client) || {_, Client} = q_all(Q)],
+            q_delete(Q),
+            {reply, true, S#st{queues = lists:keydelete(Name,#q.name,Qs)}}
     end;
-handle_call({info, Item}, _, S) ->
+i_handle_call({info, Item}, _, S) ->
     {reply, get_info(Item, S), S};
-handle_call({queue_info, Name}, _, #state{queues = Qs} = S) ->
+i_handle_call({queue_info, Name}, _, #st{queues = Qs} = S) ->
     {reply, get_queue_info(Name, Qs), S};
-handle_call({modify_regulator, Type, Qname, RegName, Opts}, _, S) ->
-    case get_queue(Qname, S#state.queues) of
+i_handle_call({modify_regulator, Type, Qname, RegName, Opts}, _, S) ->
+    case get_queue(Qname, S#st.queues) of
         #q{} = Q ->
             case do_modify_regulator(Type, RegName, Opts, Q) of
                 badarg ->
@@ -424,24 +471,24 @@ handle_call({modify_regulator, Type, Qname, RegName, Opts}, _, S) ->
         _ ->
             {reply, badarg, S}
     end;
-handle_call({modify_counter, CName, Opts}, _, #state{counters = Cs} = S) ->
+i_handle_call({modify_counter, CName, Opts}, _, #st{counters = Cs} = S) ->
     case get_counter(CName, Cs) of
         false ->
             {reply, badarg, S};
         #cr{} = CR ->
             try CR1 = init_counter(Opts, CR),
-                {reply, ok, S#state{counters = update_counter(CName,Cs,CR1)}}
+                {reply, ok, S#st{counters = update_counter(CName,Cs,CR1)}}
             catch
                 error:_ ->
                     {reply, badarg, S}
             end
     end;
-handle_call({add_counter, Name, Opts}=Req, _, #state{counters = Cs} = S) ->
+i_handle_call({add_counter, Name, Opts}=Req, _, #st{counters = Cs} = S) ->
     case get_counter(Name, Cs) of
         false ->
             try CR = init_counter([{name,Name}|Opts], #cr{name = Name,
                                                           shared = true}),
-                {reply, ok, S#state{counters = Cs ++ [CR]}}
+                {reply, ok, S#st{counters = Cs ++ [CR]}}
             catch
                 error:Reason ->
                     error_logger:error_report([{error, Reason},
@@ -451,11 +498,11 @@ handle_call({add_counter, Name, Opts}=Req, _, #state{counters = Cs} = S) ->
         _ ->
             {reply, badarg, S}
     end;
-handle_call({add_group_rate, Name, Opts}=Req,_, #state{group_rates = Gs} = S) ->
+i_handle_call({add_group_rate, Name, Opts}=Req,_, #st{group_rates = Gs} = S) ->
     case get_group(Name, Gs) of
         false ->
             try GR = init_group(Opts, #cr{name = Name}),
-                {reply, ok, S#state{group_rates = Gs ++ [GR]}}
+                {reply, ok, S#st{group_rates = Gs ++ [GR]}}
             catch
                 error:Reason ->
                     error_logger:error_report([{error, Reason},
@@ -465,11 +512,11 @@ handle_call({add_group_rate, Name, Opts}=Req,_, #state{group_rates = Gs} = S) ->
         _ ->
             {reply, badarg, S}
     end;
-handle_call({modify_group_rate, Name, Opts},_, #state{group_rates = Gs} = S) ->
+i_handle_call({modify_group_rate, Name, Opts},_, #st{group_rates = Gs} = S) ->
     case get_group(Name, Gs) of
         #grp{} = G ->
             try G1 = init_group(Opts, G),
-                {reply, ok, S#state{group_rates = update_group(Name,Gs,G1)}}
+                {reply, ok, S#st{group_rates = update_group(Name,Gs,G1)}}
             catch
                 error:_ ->
                     {reply, badarg, S}
@@ -477,22 +524,22 @@ handle_call({modify_group_rate, Name, Opts},_, #state{group_rates = Gs} = S) ->
         _ ->
             {reply, badarg, S}
     end;
-handle_call(_Req, _, S) ->
+i_handle_call(_Req, _, S) ->
     {reply, badarg, S}.
 
 
-handle_cast({set_dampers, Dampers}, #state{queues      = Qs,
+handle_cast({set_modifiers, Modifiers}, #st{queues      = Qs,
 					   group_rates = GRs,
 					   counters    = Cs} = S) ->
-    io:fwrite("~p: set_dampers (~p)~n", [?MODULE, Dampers]),
-    GRs1 = [apply_dampers(Dampers, G) || G <- GRs],
-    Cs1  = [apply_dampers(Dampers, C) || C <- Cs],
-    Qs1  = [apply_dampers(Dampers, Q) || Q <- Qs],
-    {noreply, S#state{queues = Qs1,
+    io:fwrite("~p: set_modifiers (~p)~n", [?MODULE, Modifiers]),
+    GRs1 = [apply_modifiers(Modifiers, G) || G <- GRs],
+    Cs1  = [apply_modifiers(Modifiers, C) || C <- Cs],
+    Qs1  = [apply_modifiers(Modifiers, Q) || Q <- Qs],
+    {noreply, S#st{queues = Qs1,
 		      group_rates = GRs1,
 		      counters = Cs1}}.
 
-handle_info({check_queue, Name}, #state{queues = Qs} = S) ->
+handle_info({check_queue, Name}, #st{queues = Qs} = S) ->
     case get_queue(Name, Qs) of
         #q{} = Q ->
             TS = timestamp(),
@@ -522,11 +569,11 @@ code_change(_FromVsn, St, _Extra) ->
 
 %% Internal functions
 
-get_info(queues, #state{queues = Qs}) ->
+get_info(queues, #st{queues = Qs}) ->
     [extract_name(rec_info(Q)) || Q <- Qs];
-get_info(group_rates, #state{group_rates = Gs}) ->
+get_info(group_rates, #st{group_rates = Gs}) ->
     [extract_name(rec_info(G)) || G <- Gs];
-get_info(counters, #state{counters = Cs}) ->
+get_info(counters, #st{counters = Cs}) ->
     [extract_name(rec_info(C)) || C <- Cs].
 
 get_queue_info(Name, Qs) ->
@@ -615,7 +662,7 @@ do_modify_counter_regulator(Name, Opts, #q{regulators = Regs} = Q) ->
         #cr{} = CR ->
             try CR1 = init_counter(Opts, CR),
                 Q#q{regulators = lists:keyreplace(
-                                           Name,#cr.name,Regs,CR1)}
+				   Name,#cr.name,Regs,CR1)}
             catch
                 error:_ ->
                     badarg
@@ -625,26 +672,22 @@ do_modify_counter_regulator(Name, Opts, #q{regulators = Regs} = Q) ->
     end.
 
 check_queue(#q{regulators = Regs0} = Q, TS, S) ->
-    case jobs_queue:is_empty(Q) of
+    case q_is_empty(Q) of
         true ->
             %% no action necessary
             {0, [], []};
         false ->
             %% non-empty queue
             Regs = expand_regulators(Regs0, S),
-            {N, Counters} = case check_regulators(Regs, Q, TS) of
-                                0 -> {0,[]};
-                                Nx ->
-                                    {Nx, [{C,1} || #cr{name = C} <- Regs]}
-                            end,
+            {N, Counters} = check_regulators(Regs, TS, Q),
             {N, Counters, Regs}
     end.
 
 
 
-expand_regulators([{group_rate, R}|Regs], #state{group_rates = GR} = S) ->
+expand_regulators([{group_rate, R}|Regs], #st{group_rates = GR} = S) ->
     include_regulator(get_group(R, GR), Regs, S);
-expand_regulators([{counter, C}|Regs], #state{counters = Cs} = S) ->
+expand_regulators([{counter, C}|Regs], #st{counters = Cs} = S) ->
     include_regulator(get_counter(C, Cs), Regs, S);
 expand_regulators([#rr{} = R|Regs], S) ->
     [R|expand_regulators(Regs, S)];
@@ -655,17 +698,17 @@ expand_regulators([], _) ->
 
 update_regulators(Regs, Q0, S0) ->
     lists:foldl(
-      fun(#grp{name = R} = GR, {Q, #state{group_rates = GRs} = S}) ->
+      fun(#grp{name = R} = GR, {Q, #st{group_rates = GRs} = S}) ->
 	      GR1 = GR#grp{latest_dispatch = Q#q.latest_dispatch},
-              S1 = S#state{group_rates = update_group(R, GRs, GR1)},
+              S1 = S#st{group_rates = update_group(R, GRs, GR1)},
               {Q, S1};
          (#rr{} = RR, {#q{regulators = Rs} = Q, S}) ->
               %% There can be at most one rate regulator
               Q1 = Q#q{regulators = update_rate_regulator(RR, Rs)},
               {Q1, S};
          (#cr{name = R,
-              shared = true} = CR, {Q, #state{counters = Cs} = S}) ->
-              S1 = S#state{counters = update_counter(R, Cs, CR)},
+              shared = true} = CR, {Q, #st{counters = Cs} = S}) ->
+              S1 = S#st{counters = update_counter(R, Cs, CR)},
               {Q, S1};
          (#cr{name = R} = CR, {#q{regulators = Rs} = Q, S}) ->
               Q1 = Q#q{regulators = update_counter(R, Rs, CR)},
@@ -677,62 +720,74 @@ include_regulator(false, Regs, S) ->
 include_regulator(R, Regs, S) ->
     [R|expand_regulators(Regs, S)].
 
-check_regulators(Regs, Q, TS) ->
-    check_regulators(Regs, Q, TS, infinity).
 
-check_regulators([R|Regs], Q, TS, Sofar) ->
-    case check(R, Q, TS) of
-        0 -> 0;
-        N -> check_regulators(Regs, Q, TS, erlang:min(N, Sofar))
-    end;
-check_regulators([], _, _, Sofar) ->
-    Sofar.
+-spec check_regulators([regulator()], #q{}, timestamp()) ->
+			      {integer(), [any()]}.
+%%
+check_regulators(Regs, TS, #q{latest_dispatch = TL}) ->
+    check_regulators(Regs, TS, TL, infinity, []).
 
-check(#rr{rate = #rate{interval = I}}, #q{latest_dispatch = TL}, TS) ->
-    if I == undefined ->
-            0;
-       true ->
-            trunc((TS - TL)/I)
+check_regulators([R|Regs], TS, TL, N, Cs) ->
+    case R of
+	#rr{rate = #rate{interval = I}} ->
+	    N1 = check_rr(I, TS, TL),
+	    check_regulators(Regs, TS, TL, erlang:min(N, N1), Cs);
+	#grp{rate = #rate{interval = I}, latest_dispatch = TLg} ->
+	    N1 = check_rr(I, TS, TLg),
+	    check_regulators(Regs, TS, TL, erlang:min(N, N1), Cs);
+	#cr{name = Name, increment = I, rate = #rate{limit = Max}} ->
+	    C1 = check_cr(Name, I, Max),
+	    Cs1 = if C1 == 0 ->
+			  Cs;
+		     true ->
+			  [{Name, C1}|Cs]
+		  end,
+	    check_regulators(Regs, TS, TL, erlang:min(C1, N), Cs1)
     end;
-check(#grp{rate = #rate{interval = I}, latest_dispatch = TL}, _, TS) ->
-    if I == undefined ->
-            0;
-       true ->
-            trunc((TS - TL)/I)
-    end;    
-check(#cr{name = Name, rate = #rate{limit = Max}}, _, _) ->
+check_regulators([], _, _, N, Cs) ->
+    {N, Cs}.
+
+check_rr(undefined, _, _) ->
+    0;
+check_rr(I, TS, TL) ->
+    trunc((TS - TL)/I).
+
+check_cr(Name, Incr, Max) ->
     try Cur = gproc:get_value(?AGGR(Name)),
-        erlang:max(0, Max - Cur)
+	 case Max - Cur of
+	     N when N > 0 ->
+		 N div Incr;
+	     _ ->
+		 0
+	 end
     catch
         error:_ ->
             0
     end.
 
-
+-spec dispatch_N(integer() | infinity, [any()], #q{}) -> #q{}.
+%%			
 dispatch_N(N, Counters, Q) ->
-    {Jobs, Q1} = jobs_queue:out(N, Q),
+    {Jobs, Q1} = q_out(N, Q),
     [approve(Client, Counters) || {_, Client} <- Jobs],
     Q1.
 
 
-update_queue(#q{name = N} = Q, #state{queues = Qs} = S) ->
+update_queue(#q{name = N} = Q, #st{queues = Qs} = S) ->
     Q1 = start_timer(Q),
-    S#state{queues = lists:keyreplace(N, #q.name, Qs, Q1)}.
+    S#st{queues = lists:keyreplace(N, #q.name, Qs, Q1)}.
 
 start_timer(#q{timer = TRef} = Q) when TRef =/= undefined ->
     Q;
-start_timer(#q{oldest_job = undefined} = Q) ->
-    %% empty queue
-    Q;
-start_timer(#q{name = N,
-               latest_dispatch = TSl,
-               check_interval = I} = Q) ->
-    Msg = {check_queue, N},
-    T = next_time(timestamp(), TSl, I),
-    TRef = do_send_after(T, Msg),
-    Q#q{timer = TRef};
-start_timer(Q) ->
-    Q.
+start_timer(#q{name = Name} = Q) ->
+    case next_time(timestamp(), Q) of
+        T when is_integer(T) -> 
+            Msg = {check_queue, Name},
+            TRef = do_send_after(T, Msg),
+            Q#q{timer = TRef};
+        undefined ->
+            Q
+    end.
 
 next_time(TS, TSl, I) ->
     Since = (TS - TSl) div 1000,
@@ -741,30 +796,30 @@ next_time(TS, TSl, I) ->
 do_send_after(T, Msg) ->
     erlang:send_after(T, self(), Msg).
 
-apply_dampers(Dampers, Regulator) ->
-    with_dampers(Dampers, Regulator, fun apply_damper/4).
+apply_modifiers(Modifiers, Regulator) ->
+    with_modifiers(Modifiers, Regulator, fun apply_damper/4).
 
-remove_dampers(Dampers, Regulator) ->
-    with_dampers(Dampers, Regulator, fun remove_damper/4).
+remove_modifiers(Modifiers, Regulator) ->
+    with_modifiers(Modifiers, Regulator, fun remove_damper/4).
 
-with_dampers(Dampers, Regulator, F) ->
+with_modifiers(Modifiers, Regulator, F) ->
     Rate = get_rate(Regulator),
     R0 = lists:foldl(
 	   fun({K, Local, Remote}, R) ->
 		   F(K, Local, Remote, R)
-	   end, Rate, Dampers),
-    R1 = apply_active_dampers(Dampers, R0),
+	   end, Rate, Modifiers),
+    R1 = apply_active_modifiers(Modifiers, R0),
     set_rate(R1, Regulator).
 
 
 
 apply_damper(Type, Local, Remote, R) ->
-    case lists:keyfind(Type, 1, R#rate.dampers) of
+    case lists:keyfind(Type, 1, R#rate.modifiers) of
 	false ->
 	    %% no effect on this regulator
 	    R;
 	{_, Unit} when is_integer(Unit) ->
-            %% The active_dampers list is kept up-to-date in order 
+            %% The active_modifiers list is kept up-to-date in order 
             %% to support remove_damper().
             Corr = Local * Unit,
 	    apply_corr(Type, Corr, R);
@@ -781,11 +836,12 @@ remove_damper(Type, _, _, R) ->
 
 
 apply_corr(Type, 0, R) ->
-    R#rate{active_dampers = lists:keydelete(Type, 1, R#rate.active_dampers)};
+    R#rate{active_modifiers = lists:keydelete(
+                                Type, 1, R#rate.active_modifiers)};
 apply_corr(Type, Corr, R) ->
-    ADs = lists:keystore(Type, 1, R#rate.active_dampers,
+    ADs = lists:keystore(Type, 1, R#rate.active_modifiers,
 			 {Type, Corr}),
-    R#rate{active_dampers = ADs}.
+    R#rate{active_modifiers = ADs}.
 
 
 
@@ -798,30 +854,89 @@ set_rate(R, #cr {} = Reg) -> Reg#cr {rate = R};
 set_rate(R, #grp{} = Reg) -> Reg#grp{rate = R}.
 
 
-apply_active_dampers(ADs, #rate{preset_limit = Preset} = R) ->
+apply_active_modifiers(ADs, #rate{preset_limit = Preset} = R) ->
     Limit = lists:foldl(
 	      fun({_,Corr}, L) ->
-		      L - Corr
+		      L - (Corr*Preset/100)
 	      end, Preset, ADs),
     R#rate{limit = Limit,
 	   interval = interval(Limit),
-	   active_dampers = ADs}.
+	   active_modifiers = ADs}.
     
 		 
 
 queue_job(TS, From, #q{max_size = MaxSz} = Q, S) ->
-    CurSz = jobs_queue:info(length, Q),
+    CurSz = q_info(length, Q),
     if CurSz >= MaxSz ->
-            case jobs_queue:timedout(Q) of
+            case q_timedout(Q) of
                 [] ->
                     reject(From);
                 {OldJobs, Q1} ->
                     [timeout(J) || J <- OldJobs],
-                    update_queue(jobs_queue:in(TS, From, Q1), S)
+                    update_queue(q_in(TS, From, Q1), S)
             end;
        true ->
-            update_queue(jobs_queue:in(TS, From, Q), S)
+            update_queue(q_in(TS, From, Q), S)
     end.
+
+
+
+select_queue(Type, _, #st{q_select = undefined, default_queue = Def} = S) ->
+    if Type == undefined ->
+            {Def, S};
+       true ->
+            {Type, S}
+    end;
+select_queue(Type, _, #st{q_select = M, q_select_st = MS, info_f = I} = S) ->
+    case M:queue_name(Type, MS, I) of
+        {ok, Name, MS1} ->
+            {Name, S#st{q_select_st = MS1}};
+        {error, Reason} ->
+            erlang:error({badarg, Reason})
+    end.
+
+
+%% ===========================================================
+%% Queue accessor functions.
+%% It is possible to define a different queue type through the option
+%% queue_mod :: atom()  (Default = jobs_queue)
+%% The callback module must implement the functions below.
+%%
+q_new(Opts) ->
+    [Name, Mod, MaxTime, MaxSize] = 
+        [get_value(K, Opts, Def) || {K, Def} <- [{name, undefined},
+                                                 {mod , jobs_queue},
+                                                 {max_time, undefined},
+                                                 {max_size, undefined}]],
+    #q{} = Mod:new(Opts, #q{name = Name,
+                            mod = Mod,
+                            max_time = MaxTime,
+                            max_size = MaxSize}).
+
+q_all     (#q{mod = Mod} = Q)     -> Mod:all     (Q).
+q_is_empty(#q{mod = Mod} = Q)     -> Mod:is_empty(Q).
+q_timedout(#q{mod = Mod} = Q)     -> Mod:timedout(Q).
+q_delete  (#q{mod = Mod} = Q)     -> Mod:delete  (Q).
+%%
+q_out     (infinity, #q{mod = Mod} = Q) ->  Mod:all (Q);
+q_out     (N , #q{mod = Mod} = Q) -> Mod:out     (N, Q).
+q_info    (I , #q{mod = Mod} = Q) -> Mod:info    (I, Q).
+%%
+q_in(TS, From, #q{mod = Mod} = Q) -> Mod:in(TS, From, Q).
+
+%% End queue accessor functions.
+%% ===========================================================
+
+-spec next_time(TS :: integer(), #q{}) -> integer() | undefined.
+%%
+%% Calculate the delay (in ms) until queue is checked again.
+%%
+next_time(_TS, #q{oldest_job = undefined}) ->
+    undefined;
+next_time(TS, #q{latest_dispatch = TS1,
+                 check_interval = I}) ->
+    Since = (TS - TS1) div 1000,
+    erlang:max(0, I - Since).
 
 
 %% Microsecond timestamp; never wraps
@@ -838,6 +953,20 @@ timestamp_to_datetime(TS) ->
     MS = round(TS rem 1000000 / 1000),
     %% return {Datetime, Milliseconds}
     {calendar:now_to_datetime({1258,S,0}), MS}.
+
+
+%% Enforce a maximum frequency of error reports
+error_report(E) ->
+    T = timestamp(),
+    Key = {?MODULE, prev_error},
+    case get(Key) of
+        T1 when T - T1 > ?MAX_ERROR_RPT_INTERVAL_US ->
+            error_logger:error_report(E),
+            put(Key, T);
+        _ ->
+            ignore
+    end.
+
 
 
 %%%=================================================================
