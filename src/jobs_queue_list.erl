@@ -68,12 +68,24 @@ in(TS, Job, #q{st = L} = Q) ->
 %% Dequeue a batch of N jobs; return the modified queue.
 %%
 out(N, #q{st = L, oldest_job = OJ} = Q) when N >= 0 ->
-    {Out, Rest} = lists:split(N, L),
+    {Out, Rest} = split(N, L),
     OJ1 = case Rest of
 	      [] -> undefined;
 	      _  -> OJ
 	  end,
     {Out, Q#q{st = Rest, oldest_job = OJ1}}.
+
+split(N, L) ->
+    split(N, L, []).
+
+split(_, [], Acc) ->
+    {lists:reverse(Acc), []};
+split(N, [H|T], Acc) when N > 0 ->
+    split(N-1, T, [H|Acc]);
+split(0, T, Acc) ->
+    {lists:reverse(Acc), T}.
+
+
 
 
 -spec all(#q{}) -> [entry()].

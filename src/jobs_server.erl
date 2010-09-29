@@ -991,6 +991,7 @@ error_report(E) ->
 
 rate_test_() ->
     [fun() -> rate_test(R) end || R <- [1,5,10,100]]
+	++ [fun() -> max_rate_test(R) end || R <- [400,600,1000,1500]]
 	++ [fun() -> counter_test(C) end || C <- [1,5,10]]
 	++ [fun() -> group_rate_test(R) end || R <- [10,50,100]].
 		    
@@ -1000,6 +1001,10 @@ rate_test(Rate) ->
     serial_run(Rate),
     stop_server().
 
+max_rate_test(Rate) ->
+    start_test_server({rate,Rate}),
+    parallel_run(Rate),
+    stop_server().
 
 serial_run(N) ->
     Res = tc(fun() -> run_jobs(q,N) end),
@@ -1048,6 +1053,7 @@ start_test_server({rate,Rate}) ->
                                 [{rate,[
                                         {limit, Rate}]
                                  }]}
+			       %% , {mod, jobs_queue_list}
                               ]}
                          ]}
                ]);
