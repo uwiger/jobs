@@ -33,6 +33,7 @@
          delete/1]).
 -export([in/3,
          out/2,
+	 peek/1,
          info/2,
          all/1,
          empty/1,
@@ -51,11 +52,9 @@
 
 new(Options, Q) ->
     case proplists:get_value(type, Options, fifo) of
-        {producer, F} ->
-            Q#q{type = {producer, F}};
         fifo ->
             Tab = ets:new(?MODULE, [ordered_set]),
-            #q{st = #st{table = Tab}}
+            Q#q{st = #st{table = Tab}}
     end.
 
 
@@ -76,6 +75,15 @@ in(TS, Job, #q{st = #st{table = Tab}, oldest_job = OJ} = Q) ->
     ets:insert(Tab, {{TS, Job}}),
     Q#q{oldest_job = OJ1}.
 
+
+-spec peek(#q{}) -> entry().
+peek(#q{st = #st{table = T}}) ->
+    case ets:first(T) of
+	'$end_of_table' ->
+	    undefined;
+	Key ->
+	    Key
+    end.
 
 -spec out(N :: integer(), #q{}) -> {[entry()], #q{}}.
 %%

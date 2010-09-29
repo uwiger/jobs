@@ -97,7 +97,7 @@ ask() ->
     ask(default).
 
 
--spec ask(atom()) -> {ok, reg_obj()} | {error, rejected | timeout}.
+-spec ask(job_class()) -> {ok, reg_obj()} | {error, rejected | timeout}.
 %%
 ask(Type) ->
     case call(?SERVER, {ask, Type, timestamp()}, infinity) of
@@ -286,6 +286,8 @@ init_queue({Name, standard_counter, N}, S) when is_integer(N), N > 0 ->
                            {modifiers, standard_modifiers()}]
                          }]
                        }]}, S);
+init_queue({Name, producer, F, Opts}, S) ->
+    init_queue({Name, [{type, {producer, F}} | Opts]}, S);
 init_queue({Name, Opts}, S) ->
     [ChkI, Regs] =
         [get_value(K,Opts,D) ||
@@ -414,9 +416,7 @@ handle_call(Req, From, S) ->
         {noreply, S1} ->
             {noreply, set_info(S1)};
         {reply, R, S1} ->
-            {reply, R, set_info(S1)};
-        Other ->
-            Other
+            {reply, R, set_info(S1)}
     catch
         error:Reason ->
             error_report([{error, Reason},
@@ -450,7 +450,7 @@ i_handle_call({delete_queue, Name}, _, #st{queues = Qs} = S) ->
             {reply, true, S#st{queues = Qs -- [A]}};
         #q{} = Q ->
             %% for now, let's be very brutal
-            [reject(Client) || {_, Client} = q_all(Q)],
+            [reject(Client) || {_, Client} <- q_all(Q)],
             q_delete(Q),
             {reply, true, S#st{queues = lists:keydelete(Name,#q.name,Qs)}}
     end;
@@ -501,7 +501,7 @@ i_handle_call({add_counter, Name, Opts}=Req, _, #st{counters = Cs} = S) ->
 i_handle_call({add_group_rate, Name, Opts}=Req,_, #st{group_rates = Gs} = S) ->
     case get_group(Name, Gs) of
         false ->
-            try GR = init_group(Opts, #cr{name = Name}),
+            try GR = init_group(Opts, #grp{name = Name}),
                 {reply, ok, S#st{group_rates = Gs ++ [GR]}}
             catch
                 error:Reason ->
@@ -721,7 +721,7 @@ include_regulator(R, Regs, S) ->
     [R|expand_regulators(Regs, S)].
 
 
--spec check_regulators([regulator()], #q{}, timestamp()) ->
+-spec check_regulators([regulator()], timestamp(), #q{}) ->
 			      {integer(), [any()]}.
 %%
 check_regulators(Regs, TS, #q{latest_dispatch = TL}) ->
@@ -796,6 +796,9 @@ next_time(TS, TSl, I) ->
 do_send_after(T, Msg) ->
     erlang:send_after(T, self(), Msg).
 
+apply_modifiers(Modifiers, #q{regulators = Rs} = Q) ->
+    Rs1 = [apply_modifiers(Modifiers, R) || R <- Rs],
+    Q#q{regulators = Rs1};
 apply_modifiers(Modifiers, Regulator) ->
     with_modifiers(Modifiers, Regulator, fun apply_damper/4).
 
@@ -908,21 +911,34 @@ q_new(Opts) ->
                                                  {mod , jobs_queue},
                                                  {max_time, undefined},
                                                  {max_size, undefined}]],
-    #q{} = Mod:new(Opts, #q{name = Name,
-                            mod = Mod,
-                            max_time = MaxTime,
-                            max_size = MaxSize}).
+    #q{} = q_new(Opts, #q{name = Name,
+			  mod = Mod,
+			  max_time = MaxTime,
+			  max_size = MaxSize}, Mod).
+
+q_new(Options, Q, Mod) ->
+    case proplists:get_value(type, Options, fifo) of
+        {producer, F} ->
+            Q#q{type = {producer, F}};
+        Type ->
+	    Mod:new(Options, Q#q{type = Type})
+    end.
+
 
 q_all     (#q{mod = Mod} = Q)     -> Mod:all     (Q).
-q_is_empty(#q{mod = Mod} = Q)     -> Mod:is_empty(Q).
 q_timedout(#q{mod = Mod} = Q)     -> Mod:timedout(Q).
 q_delete  (#q{mod = Mod} = Q)     -> Mod:delete  (Q).
+%%
+q_is_empty(#q{type = {producer,_}}) -> false;
+q_is_empty(#q{mod = Mod} = Q)       -> Mod:is_empty(Q).
 %%
 q_out     (infinity, #q{mod = Mod} = Q) ->  Mod:all (Q);
 q_out     (N , #q{mod = Mod} = Q) -> Mod:out     (N, Q).
 q_info    (I , #q{mod = Mod} = Q) -> Mod:info    (I, Q).
 %%
-q_in(TS, From, #q{mod = Mod} = Q) -> Mod:in(TS, From, Q).
+q_in(TS, From, #q{mod = Mod, oldest_job = OJ} = Q) ->
+    OJ1 = erlang:min(TS, OJ),    % Works even if OJ==undefined
+    Mod:in(TS, From, Q#q{oldest_job = OJ1}).
 
 %% End queue accessor functions.
 %% ===========================================================

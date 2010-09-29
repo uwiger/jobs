@@ -10,6 +10,12 @@ Examples
 --------
 ...
 
+Prerequisites
+-------------
+This application requires 'exprecs' and 'gproc'.
+The 'exprecs' module is part of http://github.com/esl/parse_trans
+Gproc can be found at http://github.com/esl/gproc
+
 Contribute
 ----------
 For issues, comments or feedback please [create an issue!] [1]

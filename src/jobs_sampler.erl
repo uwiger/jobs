@@ -49,8 +49,8 @@
 		indicators = [],
 		remote_indicators = [],
                 samplers = []               :: [#sampler{}],
-                dampers = orddict:new(),
-		remote_dampers = []}).
+                modifiers = orddict:new(),
+		remote_modifiers = []}).
 
 
 behaviour_info(callbacks) ->
@@ -85,13 +85,13 @@ init(Opts) ->
 handle_info({?MODULE, update}, #state{modified = IsModified} = S) ->
     case IsModified of
 	true ->
-	    {noreply, set_dampers(S#state{modified = false})};
+	    {noreply, set_modifiers(S#state{modified = false})};
 	false ->
 	    {noreply, S}
     end;
 handle_info(Msg, #state{samplers = Samplers0} = S) ->
     Samplers = map_handle_info(Msg, Samplers0),
-    {noreply, calc_dampers(S#state{samplers = Samplers})}.
+    {noreply, calc_modifiers(S#state{samplers = Samplers})}.
 
 
 handle_cast({get_status, Node}, S) ->
@@ -102,12 +102,12 @@ handle_cast(sample, #state{samplers = Samplers0} = S) ->
     % Dumper = value(proplists:get_value(mnesia_dump_log, Flags, false)),
     % MsgQ   = value(proplists:get_value(mnesia_tm, Flags, false)),
     Samplers = collect_samples(Samplers0),
-    {noreply, calc_dampers(S#state{samplers = Samplers})};
-handle_cast({remote, Node, Dampers}, #state{remote_dampers = Ds} = S) ->
+    {noreply, calc_modifiers(S#state{samplers = Samplers})};
+handle_cast({remote, Node, Modifiers}, #state{remote_modifiers = Ds} = S) ->
     NewDs =
-	lists:keysort(1, ([{{K,Node},V} || {K,V} <- Dampers]
+	lists:keysort(1, ([{{K,Node},V} || {K,V} <- Modifiers]
 			  ++ [D || {{_,N},_} = D <- Ds, N =/= Node])),
-    {noreply, calc_dampers(S#state{remote_dampers = NewDs})}.
+    {noreply, calc_modifiers(S#state{remote_modifiers = NewDs})}.
 
 
 terminate(_, _S) ->
@@ -133,18 +133,18 @@ init_samplers(Opts) ->
 
 
 
-group_dampers(Local, Remote) ->
+group_modifiers(Local, Remote) ->
     RemoteRegrouped = lists:foldl(
 			fun({{K,N},V}, D) ->
 				orddict:append(K,{N,V},D)
 			end, orddict:new(), Remote),
-    [{K, V, remote_dampers(K,RemoteRegrouped)}
+    [{K, V, remote_modifiers(K,RemoteRegrouped)}
      || {K,V} <- Local]
 	++
 	[{K, 0, Vs} || {K,Vs} <- RemoteRegrouped,
 		       not lists:keymember(K, 1, Local)].
 
-remote_dampers(K, Remote) ->
+remote_modifiers(K, Remote) ->
     case orddict:find(K, Remote) of
 	{ok, Vs} ->
 	    Vs;
@@ -199,50 +199,54 @@ add_to_history(Result, Timestamp, #sampler{hist_length = Len,
 
 
 sampler_error(Err, Sampler) ->
-    error_logger:error_msg([{?MODULE, sampler_error},
-			    {error, Err},
-			    {sampler, Sampler}]),
+    error_logger:error_report([{?MODULE, sampler_error},
+			       {error, Err},
+			       {sampler, Sampler}]),
     % For now, don't modify the sampler (disable it...?)
     Sampler.
 
 
-set_dampers(#state{dampers = Local, remote_dampers = Remote} = S) ->
-    Grouped = group_dampers(Local, Remote),
-    jobs_server:set_dampers(Grouped),
+set_modifiers(#state{modifiers = Local, remote_modifiers = Remote} = S) ->
+    Grouped = group_modifiers(Local, Remote),
+    jobs_server:set_modifiers(Grouped),
     S.
 
 
-calc_dampers(#state{samplers = Samplers} = S) ->
-    S1 = calc_dampers(Samplers, S),
-    case S1#state.modified of
-	false ->
-	    erlang:send_after(S#state.update_delay, self(), {?MODULE,update}),
-	    S1#state{modified = true};
+calc_modifiers(#state{samplers = Samplers} = S) ->
+    S1 = calc_modifiers(Samplers, S),
+    case S1#state.modified of 
 	true ->
-	    S1
-    end.
+	    erlang:send_after(S#state.update_delay, self(), {?MODULE,update});
+	false ->
+	    skip
+    end,
+    S1.
 
-calc_dampers(Samplers, #state{dampers = Dampers0} = S) ->
-    {Samplers1, Dampers1} =
+
+calc_modifiers(Samplers, #state{modifiers = Modifiers0} = S) ->
+    {Samplers1, {Modifiers1, IsModified}} =
 	lists:mapfoldl(
 	  fun(#sampler{mod = M,
 		       mod_state = ModS,
-		       history = History} = Sx, Acc) ->
-		  try {NewDampers, NewModSt} = M:calc(History, ModS),
-		      {Sx#sampler{mod_state = NewModSt},
-		       merge_dampers(orddict:from_list(NewDampers), Acc)}
+		       history = History} = Sx, {Acc,Flg}) ->
+		  try M:calc(History, ModS) of
+		      {NewModifiers, NewModSt} ->
+			  {Sx#sampler{mod_state = NewModSt},
+			   {merge_modifiers(orddict:from_list(NewModifiers), Acc), true}};
+		      false ->
+			  {Sx, {Acc, Flg}}
 		  catch
 		      error:Err ->
 			  sampler_error(Err, Sx),
-			  {Sx, Acc}
+			  {Sx, {Acc,Flg}}
 		  end
-	  end, Dampers0, Samplers),
-    {Samplers1, S#state{dampers = Dampers1}}.
+	  end, {Modifiers0, false}, Samplers),
+    S#state{samplers = Samplers1, modifiers = Modifiers1, modified = IsModified}.
 
 
-merge_dampers(New, Dampers) ->
+merge_modifiers(New, Modifiers) ->
     orddict:merge(
-      fun(_, V1, V2) -> erlang:max(V1, V2) end, New, Dampers).
+      fun(_, V1, V2) -> erlang:max(V1, V2) end, New, Modifiers).
 
 
 mnesia_overload_read() ->
@@ -264,16 +268,16 @@ notify_others(States) ->
      end || {Msg, X} <- States].
 
 
-% calc_dampers(New, #state{dampers = Ds0} = S) ->
+% calc_modifiers(New, #state{modifiers = Ds0} = S) ->
 %     S1 = update_state(New, S),
-%     Ds1 = calc_dampers(S1),
+%     Ds1 = calc_modifiers(S1),
 %     if Ds1 == Ds0 ->
 %             S1;
 %        true ->
 %             notify_others(Ds1),
-%             io:fwrite("applying dampers ~p~n", [Ds1]),
-%             jobs_server:set_dampers(Ds1),
-%             S1#state{dampers = Ds1}
+%             io:fwrite("applying modifiers ~p~n", [Ds1]),
+%             jobs_server:set_modifiers(Ds1),
+%             S1#state{modifiers = Ds1}
 %     end.
 
 
@@ -282,7 +286,7 @@ notify_others(States) ->
 %     S#state{indicators = Is}.
               
     
-% calc_dampers(#state{indicators = Is}) ->
+% calc_modifiers(#state{indicators = Is}) ->
 %     MnesiaInds = [mnesia_dumper,
 %                   mnesia_tm,
 %                   mnesia_remote],
@@ -292,7 +296,7 @@ notify_others(States) ->
 %                          '#info-indicators'(fields) -- MnesiaInds, Is)]).
 
 tell_node(Node, S) ->
-    gen_server:cast({?MODULE, Node}, {remote, node(), calc_dampers(S)}).
+    gen_server:cast({?MODULE, Node}, {remote, node(), calc_modifiers(S)}).
 
 
 value(false) -> 0;

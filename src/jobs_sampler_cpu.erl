@@ -85,5 +85,5 @@ minmax([H|T]) ->
                         
 
 calc(History, #st{levels = Levels} = St) ->
-    L = jobs_sampler:calc(meter, Levels, History),
+    L = jobs_sampler:calc(value, Levels, History),
     {L, St}.
