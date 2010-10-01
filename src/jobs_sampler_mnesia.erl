@@ -1,18 +1,38 @@
+%%==============================================================================
+%% Copyright 2010 Erlang Solutions Ltd.
+%%
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
+%%
+%% http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
+%%==============================================================================
+
 -module(jobs_sampler_mnesia).
 
--export([init/1,
+-export([init/2,
          sample/2,
          handle_msg/3,
          calc/2]).
 
--record(st, {levels = []}).
+-record(st, {levels = [],
+	     subscriber}).
 
 
 
-init(Opts) ->
-    mnesia:subscribe(system),
+init(Name, Opts) ->
+    Pid = spawn_link(fun() ->
+			     mnesia:subscribe(system),
+			     subscriber_loop(Name)
+		     end),
     Levels = proplists:get_value(levels, Opts, default_levels()),
-    {ok, #st{levels = Levels}}.
+    {ok, #st{levels = Levels, subscriber = Pid}}.
 
 default_levels() ->
     {seconds, [{0,1}, {30,2}, {45,3}, {60,4}]}.
@@ -31,6 +51,14 @@ calc(History, #st{levels = Levels} = S) ->
     {jobs_sampler:calc(time, Levels, History), S}.
 
 
+subscriber_loop(Name) ->
+    receive
+	Msg ->
+	    jobs_sampler:tell_sampler(Name, Msg),
+	    subscriber_loop(Name)
+    end.
+
+
 is_overload() ->
     %% FIX THIS!!!!
     case mnesia_overload_read() of
@@ -41,8 +69,7 @@ is_overload() ->
     end.
 
 mnesia_overload_read() ->
-    %% This function is not present in older mnesia versions
-    %% (or currently indeed in /any/ official version.)
+    %% This function is not present in mnesia versions older than R14A
     case erlang:function_exported(mnesia_lib,overload_read,0) of
 	false ->
             [];

@@ -1,32 +1,42 @@
-%%% The contents of this file are subject to the Erlang Public License,
-%%% Version 1.0, (the "License"); you may not use this file except in
-%%% compliance with the License. You may obtain a copy of the License at
-%%% http://www.erlang.org/license/EPL1_0.txt
-%%%
-%%% Software distributed under the License is distributed on an "AS IS"
-%%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%%% the License for the specific language governing rights and limitations
-%%% under the License.
-%%%
-%%% The Original Code is jobs-0.1.
-%%%
-%%% The Initial Developer of the Original Code is Ericsson AB.
-%%% Portions created by Ericsson are Copyright (C), 2006, Ericsson AB.
-%%% All Rights Reserved.
-%%%
-%%% Contributor(s): ______________________________________.
+%%==============================================================================
+%% Copyright 2010 Erlang Solutions Ltd.
+%%
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
+%%
+%% http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
+%%==============================================================================
 
-%%%-------------------------------------------------------------------
-%%% File    : jobs_sampler.erl
-%%% @author  : Ulf Wiger <ulf.wiger@erlang-solutions.com>
-%%% @end
-%%% Description : 
-%%%
-%%% Created : 15 Jan 2010 by Ulf Wiger <ulf.wiger@erlang-solutions.com>
-%%%-------------------------------------------------------------------
+%%-------------------------------------------------------------------
+%% File    : jobs_sampler.erl
+%% @author  : Ulf Wiger <ulf.wiger@erlang-solutions.com>
+%% @end
+%% Description : 
+%%
+%% Created : 15 Jan 2010 by Ulf Wiger <ulf.wiger@erlang-solutions.com>
+%%-------------------------------------------------------------------
 -module(jobs_sampler).
 
--compile(export_all).
+-export([start_link/0, start_link/1,
+	 trigger_sample/0,
+	 tell_sampler/2,
+	 calc/3]).
+
+-export([init/1,
+	 behaviour_info/1,
+	 handle_call/3,
+	 handle_cast/2,
+	 handle_info/2,
+	 terminate/2,
+	 code_change/3]).
+
 -include_lib("parse_trans/include/exprecs.hrl").
 
 -record(indicators, {mnesia_dumper = 0,
@@ -40,6 +50,8 @@
                   step,    % {seconds, [{Secs,Step}]}|{levels,[{Level,Step}]}
 		  hist_length = 10,
                   history = queue:new()}).
+
+-define(SAMPLE_INTERVAL, 10000).
 
 
 -export_records([indicators]).
@@ -70,17 +82,29 @@ start_link(Opts) ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, Opts, []).
 
 
+tell_sampler(P, Msg) ->
+    gen_server:call(?MODULE, {tell_sampler, P, timestamp(), Msg}).
+
 %% ==========================================================
 %% Gen_server callbacks
 
 init(Opts) ->
     Samplers = init_samplers(Opts),
-    mnesia:subscribe(system),
-    timer:apply_interval(10000, ?MODULE, trigger_sample, []),
+    timer:apply_interval(?SAMPLE_INTERVAL, ?MODULE, trigger_sample, []),
     gen_server:abcast(nodes(), ?MODULE, {get_status, node()}),
-    % [{?MODULE,N} ! {get_status,node()} || N <- nodes()],
     {ok, #state{samplers = Samplers}}.
 
+
+handle_call({tell_sampler, Name, TS, Msg}, _From, #state{samplers = Samplers0} = St) ->
+    case lists:keyfind(Name, #sampler.name, Samplers0) of
+	false ->
+	    {reply, {error, not_found}, St};
+	#sampler{} = Sampler ->
+	    Sampler1 = one_handle_info(Msg, TS, Sampler),
+	    Samplers1 = lists:keyreplace(Name, #sampler.name, Samplers0, Sampler1),
+	    {reply, ok, St#state{samplers = Samplers1}}
+    end.
+		
 
 handle_info({?MODULE, update}, #state{modified = IsModified} = S) ->
     case IsModified of
@@ -98,9 +122,6 @@ handle_cast({get_status, Node}, S) ->
     tell_node(Node, S),
     {noreply, S};
 handle_cast(sample, #state{samplers = Samplers0} = S) ->
-    % Flags = mnesia_overload_read(),
-    % Dumper = value(proplists:get_value(mnesia_dump_log, Flags, false)),
-    % MsgQ   = value(proplists:get_value(mnesia_tm, Flags, false)),
     Samplers = collect_samples(Samplers0),
     {noreply, calc_modifiers(S#state{samplers = Samplers})};
 handle_cast({remote, Node, Modifiers}, #state{remote_modifiers = Ds} = S) ->
@@ -125,7 +146,7 @@ init_samplers(Opts) ->
     Samplers = proplists:get_value(samplers, Opts, []),
     lists:map(
       fun({Name, Mod, Args}) ->
-	      {ok, ModSt} = Mod:init(Args),
+	      {ok, ModSt} = Mod:init(Name, Args),
 	      #sampler{name = Name,
 		       mod = Mod,
 		       mod_state = ModSt}
@@ -249,23 +270,13 @@ merge_modifiers(New, Modifiers) ->
       fun(_, V1, V2) -> erlang:max(V1, V2) end, New, Modifiers).
 
 
-mnesia_overload_read() ->
-    %% This function is not present in older mnesia versions
-    %% (or currently indeed in /any/ official version.)
-    case erlang:function_exported(mnesia_lib,overload_read,0) of
-	false ->
-	    [];
-	true ->
-	    mnesia_lib:overload_read()
-    end.
 
-
-notify_others(States) ->
-    [case X of
-        {X1,X1} -> ignore;
-        {X2,_} ->
-             [{?MODULE,N} ! {remote, Msg, node(), X2} || N <- nodes()]
-     end || {Msg, X} <- States].
+%% notify_others(States) ->
+%%     [case X of
+%%         {X1,X1} -> ignore;
+%%         {X2,_} ->
+%%              [{?MODULE,N} ! {remote, Msg, node(), X2} || N <- nodes()]
+%%      end || {Msg, X} <- States].
 
 
 % calc_modifiers(New, #state{modifiers = Ds0} = S) ->
