@@ -66,7 +66,7 @@
 
 
 behaviour_info(callbacks) ->
-    [{init, 1},
+    [{init, 2},
      {sample, 2},
      {handle_msg, 3},
      {calc, 2}].
@@ -310,10 +310,10 @@ tell_node(Node, S) ->
     gen_server:cast({?MODULE, Node}, {remote, node(), calc_modifiers(S)}).
 
 
-value(false) -> 0;
-value(true ) -> 1;
-value([]   ) -> 0;
-value([_|_]) -> 1.
+%% value(false) -> 0;
+%% value(true ) -> 1;
+%% value([]   ) -> 0;
+%% value([_|_]) -> 1.
 
 
 

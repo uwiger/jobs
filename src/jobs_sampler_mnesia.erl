@@ -16,6 +16,8 @@
 
 -module(jobs_sampler_mnesia).
 
+-behaviour(jobs_sampler).
+
 -export([init/2,
          sample/2,
          handle_msg/3,

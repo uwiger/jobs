@@ -17,6 +17,7 @@
 
 {application, jobs,
  [
+  {vsn, "0.1"},
   {description, "Job scheduler"},
   {applications, [kernel, stdlib, gproc]},
   {mod, {jobs_app, []}},
