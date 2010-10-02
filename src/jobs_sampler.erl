@@ -181,9 +181,12 @@ collect_samples(Samplers) ->
 one_sample(#sampler{mod = M,
                     mod_state = ModS} = Sampler) ->
     Timestamp = timestamp(),
-    try {Res, NewModS} = M:sample(Timestamp, ModS),
-	add_to_history(Res, Timestamp,
-		       Sampler#sampler{mod_state = NewModS})
+    try M:sample(Timestamp, ModS) of
+	{Res, NewModS} ->
+	    add_to_history(Res, Timestamp,
+			   Sampler#sampler{mod_state = NewModS});
+	ignore ->
+	    Sampler
     catch
         error:Err ->
 	    sampler_error(Err, Sampler)

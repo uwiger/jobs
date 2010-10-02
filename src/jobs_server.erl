@@ -524,7 +524,7 @@ i_handle_call(_Req, _, S) ->
     {reply, badarg, S}.
 
 
-handle_cast({set_modifiers, Modifiers}, #st{queues      = Qs,
+handle_cast({set_modifiers, Modifiers}, #st{queues     = Qs,
 					   group_rates = GRs,
 					   counters    = Cs} = S) ->
     io:fwrite("~p: set_modifiers (~p)~n", [?MODULE, Modifiers]),
