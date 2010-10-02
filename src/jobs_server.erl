@@ -84,8 +84,6 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
--opaque counter() :: {any(), any()}.
--type queue_options() :: list().
 -type queue_name() :: any().
 -type info_category() :: queues | group_rates | counters.
 
@@ -948,7 +946,12 @@ q_in(TS, From, #q{mod = Mod, oldest_job = OJ} = Q) ->
 next_time(_TS, #q{oldest_job = undefined}) ->
     undefined;
 next_time(TS, #q{latest_dispatch = TS1,
-                 check_interval = I}) ->
+                 check_interval = I0}) ->
+    I = case I0 of
+	    _ when is_integer(I0) -> I0;
+	    {M,F, As} ->
+		M:F(TS, TS1, As)
+	end,
     Since = (TS - TS1) div 1000,
     erlang:max(0, I - Since).
 

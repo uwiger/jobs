@@ -56,8 +56,13 @@ calc(History, #st{levels = Levels} = S) ->
 subscriber_loop(Name) ->
     receive
 	Msg ->
-	    jobs_sampler:tell_sampler(Name, Msg),
-	    subscriber_loop(Name)
+	    case jobs_sampler:tell_sampler(Name, Msg) of
+		ok ->
+		    subscriber_loop(Name);
+		{error, _} ->
+		    %% sampler likely removed
+		    exit(normal)
+	    end
     end.
 
 

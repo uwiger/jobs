@@ -24,7 +24,8 @@
 %%-------------------------------------------------------------------
 
 -type job_class() :: any().
--opaque reg_obj() :: any().
+-opaque counter() :: {any(), any()}.
+-opaque reg_obj() :: [counter()].
 
 -type option()     :: {queues, [q_spec()]}
                     | {group_rates, [{q_name(), [option()]}]}
