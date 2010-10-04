@@ -27,7 +27,7 @@ with_msg_sampler(Rate) ->
 					    [{test,10}]}]}]}
 				]}
 			   ]},
-		  {samplers, [{test, jobs_test_sampler,
+		  {samplers, [{test, jobs_sampler_slave,
 			       {value, [{1,1},{2,2},{3,3}]}}
 			     ]}
 		 ]
