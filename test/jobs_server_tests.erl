@@ -12,12 +12,27 @@
 
 
 
+%% rate_test_() ->
+%%     {timeout, 60000,
+%%      [fun() -> rate_test(R) end || R <- [1,5,10,100]]
+%%      ++ [fun() -> max_rate_test(R) end || R <- [400,600,1000,1500]]
+%%      ++ [fun() -> counter_test(C) end || C <- [1,5,10]]
+%%      ++ [fun() -> group_rate_test(R) end || R <- [10,50,100]]}.
+
 rate_test_() ->
-    [fun() -> rate_test(R) end || R <- [1,5,10,100]]
-	++ [fun() -> max_rate_test(R) end || R <- [400,600,1000,1500]]
-	++ [fun() -> counter_test(C) end || C <- [1,5,10]]
-	++ [fun() -> group_rate_test(R) end || R <- [10,50,100]].
-		    
+     {foreachx,
+      fun(Type) -> start_test_server(Type) end,
+      fun(_, _) -> stop_server() end,
+      [{{rate,1}, fun({_,R},_) -> [fun() -> rate_test(R) end] end}
+       , {{rate,   5}, fun({_,R},_) -> [fun() -> rate_test(R) end] end}
+       , {{rate, 100}, fun({_,R},_) -> [fun() -> rate_test(R) end] end}
+       , {{rate, 400}, fun({_,R},_) -> [fun() -> max_rate_test(R) end] end}
+       , {{rate, 600}, fun({_,R},_) -> [fun() -> max_rate_test(R) end] end}
+       , {{rate,1000}, fun({_,R},_) -> [fun() -> max_rate_test(R) end] end}
+       , {[{rate,100},
+	   {group,50}], fun([{_,R}|_],_) -> [fun() -> max_rate_test(R) end] end}
+      ]}.
+
 
 rate_test(Rate) ->
     start_test_server({rate,Rate}),
@@ -72,42 +87,68 @@ collect([]) ->
 			       
 
 start_test_server({rate,Rate}) ->
-    jobs_server:start_link([{queues, [{q, [{regulators,
-					    [{rate,[
-						    {limit, Rate}]
-					     }]}
-					   %% , {mod, jobs_queue_list}
-					  ]}
-				     ]}
-			   ]);
+    start_with_conf([{queues, [{q, [{regulators,
+				     [{rate,[
+					     {limit, Rate}]
+				      }]}
+				    %% , {mod, jobs_queue_list}
+				   ]}
+			      ]}
+		    ]),
+    Rate;
 start_test_server([{rate,Rate},{group,Grp}]) ->
-    jobs_server:start_link([{group_rates, [{gr, [{limit, Grp}]}]},
-			    {queues, [{q, [{regulators,
-					    [{rate,[{limit, Rate}]},
-					     {group_rate, gr}]}
-					  ]}
-				     ]}
-			   ]);
+    start_with_conf([{group_rates, [{gr, [{limit, Grp}]}]},
+		     {queues, [{q, [{regulators,
+				     [{rate,[{limit, Rate}]},
+				      {group_rate, gr}]}
+				   ]}
+			      ]}
+		    ]),
+    Rate;
 start_test_server({count, Count}) ->
+    start_with_conf([{queues, [{q, [{regulators,
+				     [{counter,[
+						{limit, Count}
+					       ]
+				      }]}
+				   ]}
+			      ]}
+		    ]).
+
+start_with_conf(Conf) ->
+    application:unload(jobs),
+    application:load(jobs),
+    [application:set_env(jobs, K, V) ||	{K,V} <- Conf],
     application:start(gproc),
-    jobs_server:start_link([{queues, [{q, [{regulators,
-					    [{counter,[
-						       {limit, Count}
-						      ]
-					     }]}
-					  ]}
-				     ]}
-			   ]).
+    application:start(jobs).
 
 
 stop_server() ->
-    unlink(whereis(?MODULE)),
-    Ref = erlang:monitor(process, ?MODULE),
-    exit(whereis(?MODULE), done),
-    %% make sure it's really down before returning:
-    receive {'DOWN',Ref,_,_,_} ->
-            ok
-    end.
+    application:stop(jobs),
+    application:stop(gproc).
+
+%% stop_server() ->
+%%     case whereis(?MODULE) of
+%%         undefined ->
+%%             ok; %% Already stopped!
+%%         Pid ->
+%%             unlink(Pid),
+%%             Ref = erlang:monitor(process, ?MODULE),
+%%             exit(Pid, done),
+%%             %% make sure it's really down before returning:
+%%             receive {'DOWN',Ref,_,_,_} ->
+%%                     ok
+%%             end
+%%     end.
+
+%% stop_server() ->
+%%     unlink(whereis(?MODULE)),
+%%     Ref = erlang:monitor(process, ?MODULE),
+%%     exit(whereis(?MODULE), done),
+%%     %% make sure it's really down before returning:
+%%     receive {'DOWN',Ref,_,_,_} ->
+%%             ok
+%%     end.
 
 
 tc(F) ->
