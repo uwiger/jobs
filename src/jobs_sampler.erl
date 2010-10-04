@@ -37,29 +37,20 @@
 	 terminate/2,
 	 code_change/3]).
 
--include_lib("parse_trans/include/exprecs.hrl").
+-include("jobs.hrl").
 
--record(indicators, {mnesia_dumper = 0,
-                     mnesia_tm = 0,
-                     mnesia_remote = []}).
+%% -record(indicators, {mnesia_dumper = 0,
+%%                      mnesia_tm = 0,
+%%                      mnesia_remote = []}).
 
--record(sampler, {name,
-                  mod,
-                  mod_state,
-                  type,    % binary | meter
-                  step,    % {seconds, [{Secs,Step}]}|{levels,[{Level,Step}]}
-		  hist_length = 10,
-                  history = queue:new()}).
 
 -define(SAMPLE_INTERVAL, 10000).
 
 
--export_records([indicators]).
-
 -record(state, {modified = false,
 		update_delay = 500,
-		indicators = [],
-		remote_indicators = [],
+		%% indicators = [],
+		%% remote_indicators = [],
                 samplers = []               :: [#sampler{}],
                 modifiers = orddict:new(),
 		remote_modifiers = []}).
@@ -76,7 +67,8 @@ trigger_sample() ->
     gen_server:cast(?MODULE, sample).
 
 start_link() ->
-    start_link([]).
+    Opts = application:get_all_env(jobs),
+    start_link(Opts).
 
 start_link(Opts) ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, Opts, []).
@@ -324,17 +316,27 @@ tell_node(Node, S) ->
 %% example: type = time , step = {seconds, [{0,1},{30,2},{45,3},{50,4}]}
 %%          type = value, step = [{80,1},{85,2},{90,3},{95,4},{100,5}]
 
-calc(time, Template, History) ->
+calc(Type, Template, History) ->
+    case queue:is_empty(History) of
+	true -> 0;
+	false -> calc1(Type, Template, History)
+    end.
+
+calc1(time, Template, History) ->
     Now = timestamp(),
     {Unit, Steps} = case Template of
 			T when is_list(T) ->
 			    {msec, T};
-			{U, [_|_] = T} when U==sec; U==msec ->
-			    {U, T}
+			{U, T} ->
+			    U1 = if
+				     U==sec; U==seconds -> sec;
+				     U==ms; msec        -> msec
+				 end,
+			    {U1, T}
 		    end,
-    case take_last(fun({V,_}) -> V == true end, History) of
-        [] -> 0;
-        {Since,_} ->
+    case true_since(History) of
+	0 -> 0;
+	Since ->
             %% timestamps are in milliseconds
             Time = case Unit of
 		       sec  -> (Now - Since) div 1000;
@@ -342,30 +344,33 @@ calc(time, Template, History) ->
 		   end,
             pick_step(Time, Steps)
     end;
-calc(value, Levels, History) ->
-    case History of
-        [] -> 0;
-        [{_, Level}|_] ->
-            pick_step(Level, Levels)
-    end.
+calc1(value, Template, History) ->
+    {value, {_, Level}} = queue:peek_r(History),
+    pick_step(Level, Template).
 
+true_since(Q) ->
+    true_since(queue:out_r(Q), 0).
 
-take_last(F, L) ->
-    take_last(F, L, []).
-
-take_last(F, [H|T], Last) ->
-    case F(H) of
-        true  -> take_last(F, T, H);
-        false -> Last
-    end;
-take_last(_, [], Last) ->
-    Last.
+true_since({{value,{_,false}},_}, Since) ->
+    Since;
+true_since({empty, _}, Since) ->
+    Since;
+true_since({{value,{T,true}},Q1}, _) ->
+    true_since(queue:out_r(Q1), T).
 
 
 pick_step(Level, Ls) ->
     take_last(fun({L,_}) ->
-                      Level > L
+                      Level >= L
               end, Ls, 0).
+
+take_last(F, [{_,V} = H|T], Last) ->
+    case F(H) of
+        true  -> take_last(F, T, V);
+        false -> Last
+    end;
+take_last(_, [], Last) ->
+    Last.
 
 
 %% millisecond timestamp, never wraps

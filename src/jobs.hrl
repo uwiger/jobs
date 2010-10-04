@@ -86,22 +86,32 @@
 -type regulator_type() :: counter | group_rate.
 -type regulator_ref()  :: {regulator_type(), atom()}.
 
--record(q, {name                 :: any(),
-            mod                  :: atom(),
-            type = fifo          :: fifo | {producer, {atom(),atom(),list()}},
-            group                :: atom(),
-            regulators  = []     :: [regulator() | regulator_ref()],
-            max_time             :: undefined | integer(),
-            max_size             :: undefined | integer(),
-            latest_dispatch = 0  :: integer(),
-            check_interval       :: integer(),
-            oldest_job           :: undefined | integer(),
-            timer,
-            st
-           }).
+-record(queue, {name                 :: any(),
+		mod                  :: atom(),
+		type = fifo          :: fifo | {producer,
+						{atom(),atom(),list()}},
+		group                :: atom(),
+		regulators  = []     :: [regulator() | regulator_ref()],
+		max_time             :: undefined | integer(),
+		max_size             :: undefined | integer(),
+		latest_dispatch = 0  :: integer(),
+		check_interval       :: integer(),
+		oldest_job           :: undefined | integer(),
+		timer,
+		st
+	       }).
 
 -record(action, {name      :: atom(),
                  type      :: approve | reject}).
+
+-record(sampler, {name,
+                  mod,
+                  mod_state,
+                  type,    % binary | meter
+                  step,    % {seconds, [{Secs,Step}]}|{levels,[{Level,Step}]}
+		  hist_length = 10,
+                  history = queue:new()}).
+
 
 %% Gproc counter objects for counter-based regulation
 %% Each worker process gets a counter object. The aggregated counter,

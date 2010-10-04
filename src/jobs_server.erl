@@ -43,6 +43,7 @@
          delete_group_rate/1,
          info/1,
          queue_info/1,
+	 queue_info/2,
          modify_regulator/4]).
 
 
@@ -70,7 +71,7 @@
 -import(proplists, [get_value/3]).
 
 -include("jobs.hrl").
--record(st, {queues      = []  :: [#q{}],
+-record(st, {queues      = []  :: [#queue{}],
 	     group_rates = []  :: [#grp{}],
 	     counters    = []  :: [#cr{}],  
 	     q_select          :: atom(),
@@ -151,6 +152,9 @@ info(Item) ->
 queue_info(Name) ->
     call(?SERVER, {queue_info, Name}).
 
+queue_info(Name, Item) ->
+    call(?SERVER, {queue_info, Name, Item}).
+
 add_group_rate(Name, Options) ->
     call(?SERVER, {add_group_rate, Name, Options}).
 
@@ -215,12 +219,7 @@ timeout(From) ->
 -spec start_link() -> {ok, pid()}.
 %%
 start_link() ->
-    Opts = case application:get_env(options) of
-               {ok, O} when is_list(O) ->
-                   O;
-	       _ ->
-                   []
-	   end,
+    Opts = application:get_all_env(jobs),
     start_link(Opts).
 
 -spec start_link([option()]) -> {ok, pid()}.
@@ -255,7 +254,7 @@ init(Opts) ->
     Default0 = case Queues of
                    [] ->
                        undefined;
-                   [#q{name = N}|_] ->
+                   [#queue{name = N}|_] ->
                        N
                end,
     Default = get_value(default_queue, Opts, Default0),
@@ -290,10 +289,10 @@ init_queue({Name, Opts}, S) ->
             {K, D} <- [{check_interval,undefined},
                        {regulators, []}]],
     Q0 = q_new([{name,Name}|Opts]),
-    Q1 = init_regulators(Regs, Q0#q{check_interval = ChkI}),
+    Q1 = init_regulators(Regs, Q0#queue{check_interval = ChkI}),
     calculate_check_interval(Q1, S).
 
-calculate_check_interval(#q{regulators = Rs,
+calculate_check_interval(#queue{regulators = Rs,
                             check_interval = undefined} = Q, S) ->
     Regs = expand_regulators(Rs, S),
     I = lists:foldl(
@@ -302,7 +301,7 @@ calculate_check_interval(#q{regulators = Rs,
 		  I1 = Rate#rate.interval div 1000,
                   erlang:min(I1, Acc)
           end, infinity, Regs),
-    Q#q{check_interval = I};
+    Q#queue{check_interval = I};
 calculate_check_interval(Q, _) ->
     Q.
                                
@@ -330,7 +329,7 @@ init_counters(Cs) ->
                                                     shared = true})
       end, Cs).
 
-init_regulators(Rs, #q{name = Qname} = Q) ->
+init_regulators(Rs, #queue{name = Qname} = Q) ->
     {Rs1,_} = lists:mapfoldl(
 		fun({rate, Opts}, {Rx,Cx}) ->
 			Name0 = {rate,Qname,Rx},
@@ -353,7 +352,7 @@ init_regulators(Rs, #q{name = Qname} = Q) ->
         _ ->
             ok
     end,
-    Q#q{regulators = Rs1}.
+    Q#queue{regulators = Rs1}.
 
 init_rate_regulator(Opts, #rr{rate = R} = RR) ->
     [Limit,Modifiers,Name] =
@@ -429,11 +428,21 @@ i_handle_call({ask, Type, TS}, From, #st{queues = Qs} = S) ->
                 reject  -> reject(From)
             end,
             {noreply, S1};
-        #q{} = Q ->
+        #queue{} = Q ->
             {noreply, queue_job(TS, From, Q, S1)};
         false ->
             {reply, badarg, S1}
     end;
+i_handle_call({set_modifiers, Modifiers}, _, #st{queues     = Qs,
+						 group_rates = GRs,
+						 counters    = Cs} = S) ->
+    %% io:fwrite("~p: set_modifiers (~p)~n", [?MODULE, Modifiers]),
+    GRs1 = [apply_modifiers(Modifiers, G) || G <- GRs],
+    Cs1  = [apply_modifiers(Modifiers, C) || C <- Cs],
+    Qs1  = [apply_modifiers(Modifiers, Q) || Q <- Qs],
+    {reply, ok, S#st{queues = Qs1,
+		     group_rates = GRs1,
+		     counters = Cs1}};
 i_handle_call({add_queue, Name, Options}, _, #st{queues = Qs} = S) ->
     false = get_queue(Name, Qs),
     NewQueues = init_queues([{Name, Options}], S),
@@ -444,19 +453,21 @@ i_handle_call({delete_queue, Name}, _, #st{queues = Qs} = S) ->
             {reply, false, S};
         #action{} = A ->
             {reply, true, S#st{queues = Qs -- [A]}};
-        #q{} = Q ->
+        #queue{} = Q ->
             %% for now, let's be very brutal
             [reject(Client) || {_, Client} <- q_all(Q)],
             q_delete(Q),
-            {reply, true, S#st{queues = lists:keydelete(Name,#q.name,Qs)}}
+            {reply, true, S#st{queues = lists:keydelete(Name,#queue.name,Qs)}}
     end;
 i_handle_call({info, Item}, _, S) ->
     {reply, get_info(Item, S), S};
 i_handle_call({queue_info, Name}, _, #st{queues = Qs} = S) ->
     {reply, get_queue_info(Name, Qs), S};
+i_handle_call({queue_info, Name, Item}, _, #st{queues = Qs} = S) ->
+    {reply, get_queue_info(Name, Item, Qs), S};
 i_handle_call({modify_regulator, Type, Qname, RegName, Opts}, _, S) ->
     case get_queue(Qname, S#st.queues) of
-        #q{} = Q ->
+        #queue{} = Q ->
             case do_modify_regulator(Type, RegName, Opts, Q) of
                 badarg ->
                     {reply, badarg, S};
@@ -523,30 +534,21 @@ i_handle_call({modify_group_rate, Name, Opts},_, #st{group_rates = Gs} = S) ->
 i_handle_call(_Req, _, S) ->
     {reply, badarg, S}.
 
-
-handle_cast({set_modifiers, Modifiers}, #st{queues     = Qs,
-					   group_rates = GRs,
-					   counters    = Cs} = S) ->
-    io:fwrite("~p: set_modifiers (~p)~n", [?MODULE, Modifiers]),
-    GRs1 = [apply_modifiers(Modifiers, G) || G <- GRs],
-    Cs1  = [apply_modifiers(Modifiers, C) || C <- Cs],
-    Qs1  = [apply_modifiers(Modifiers, Q) || Q <- Qs],
-    {noreply, S#st{queues = Qs1,
-		      group_rates = GRs1,
-		      counters = Cs1}}.
+handle_cast(_Msg, S) ->
+    {noreply, S}.
 
 handle_info({check_queue, Name}, #st{queues = Qs} = S) ->
     case get_queue(Name, Qs) of
-        #q{} = Q ->
+        #queue{} = Q ->
             TS = timestamp(),
-            Q1 = Q#q{timer = undefined},
+            Q1 = Q#queue{timer = undefined},
             case check_queue(Q1, TS, S) of
                 {0, _, _} ->
                     {noreply, update_queue(Q1, S)};
                 {N, Counters, Regs} ->
                     Q2 = dispatch_N(N, Counters, Q1),
                     {Q3, S3} = update_regulators(
-				 Regs, Q2#q{latest_dispatch = TS}, S),
+				 Regs, Q2#queue{latest_dispatch = TS}, S),
                     {noreply, update_queue(Q3, S3)}
             end;
         _ ->
@@ -566,43 +568,63 @@ code_change(_FromVsn, St, _Extra) ->
 %% Internal functions
 
 get_info(queues, #st{queues = Qs}) ->
-    [extract_name(rec_info(Q)) || Q <- Qs];
+    jobs_info:pp(Qs);
 get_info(group_rates, #st{group_rates = Gs}) ->
-    [extract_name(rec_info(G)) || G <- Gs];
+    jobs_info:pp(Gs);
 get_info(counters, #st{counters = Cs}) ->
-    [extract_name(rec_info(C)) || C <- Cs].
+    jobs_info:pp(Cs).
 
 get_queue_info(Name, Qs) ->
     case get_queue(Name, Qs) of
         false ->
             undefined;
-        #action{type = Type} ->
-            [{name, Name},
-             {action, Type}];
-        Q ->
-            rec_info(Q)
+	Other ->
+	    jobs_info:pp(Other)
     end.
 
-rec_info(R) ->
-    Attrs = case R of
-                #rr {} -> record_info(fields,rr);
-                #cr {} -> record_info(fields,cr);
-                #grp{} -> record_info(fields,grp);
-                #q  {} -> record_info(fields,q)
-            end,
-    lists:zipwith(fun(A,P) -> {A, element(P,R)} end, 
-                  Attrs, lists:seq(2,tuple_size(R))).
+get_queue_info(Name, Item, Qs) ->
+    case get_queue(Name, Qs) of
+	false ->
+	    undefined;
+	Q ->
+	    do_get_queue_info(Item, Q)
+    end.
+
+do_get_queue_info(rate_limit, #queue{regulators = Rs}) ->
+    case lists:keyfind(rr, 1, Rs) of
+	#rr{rate = #rate{limit = Limit}} ->
+	    Limit;
+	false ->
+	    undefined
+    end.
 
 
-extract_name(L) ->
-    Name = proplists:get_value(name, L, '#no_name#'),
-    {Name, lists:keydelete(name, 1, L)}.
+%% rec_info(R) ->
+%%     Zip = fun(Attrs) ->
+%% 		  lists:zipwith(fun(A,P) -> {A, rec_info(element(P,R))} end, 
+%% 				Attrs, lists:seq(2,tuple_size(R)))
+%% 	  end,
+%%     case R of
+%% 	#rr {} -> Zip(record_info(fields,rr));
+%% 	#cr {} -> Zip(record_info(fields,cr));
+%% 	#grp{} -> Zip(record_info(fields,grp));
+%% 	#queue  {} -> Zip(record_info(fields,q));
+%% 	#rate{} -> Zip(record_info(fields,rate));
+%% 	L when is_list(L) ->
+%% 	    [rec_info(X) || X <- L];
+%% 	Other -> Other
+%%     end.
+
+
+%% extract_name(L) ->
+%%     Name = proplists:get_value(name, L, '#no_name#'),
+%%     {Name, lists:keydelete(name, 1, L)}.
 
                      
 
 
 get_queue(Name, Qs) ->
-    lists:keyfind(Name, #q.name, Qs).
+    lists:keyfind(Name, #queue.name, Qs).
 
 get_group(undefined, _) ->
     false;
@@ -625,7 +647,7 @@ update_rate_regulator(RR, Rs) ->
     lists:keyreplace(rr, 1, Rs, RR).
 
 
-do_modify_regulator(Type, Name, Opts, #q{} = Q) ->
+do_modify_regulator(Type, Name, Opts, #queue{} = Q) ->
     case lists:keymember(name, 1, Opts) of
         true ->
             badarg;
@@ -639,11 +661,11 @@ do_modify_regulator(Type, Name, Opts, #q{} = Q) ->
             badarg
     end.
 
-do_modify_rate_regulator(Name, Opts, #q{regulators = Regs} = Q) ->
+do_modify_rate_regulator(Name, Opts, #queue{regulators = Regs} = Q) ->
     case lists:keyfind(Name, #rr.name, Regs) of
         #rr{} = RR ->
             try RR1 = init_rate_regulator(Opts, RR),
-                Q#q{regulators = lists:keyreplace(
+                Q#queue{regulators = lists:keyreplace(
                                            Name,#rr.name,Regs,RR1)}
             catch
                 error:_ ->
@@ -653,11 +675,11 @@ do_modify_rate_regulator(Name, Opts, #q{regulators = Regs} = Q) ->
             badarg
     end.
 
-do_modify_counter_regulator(Name, Opts, #q{regulators = Regs} = Q) ->
+do_modify_counter_regulator(Name, Opts, #queue{regulators = Regs} = Q) ->
     case lists:keyfind(Name, #rr.name, Regs) of
         #cr{} = CR ->
             try CR1 = init_counter(Opts, CR),
-                Q#q{regulators = lists:keyreplace(
+                Q#queue{regulators = lists:keyreplace(
 				   Name,#cr.name,Regs,CR1)}
             catch
                 error:_ ->
@@ -667,7 +689,7 @@ do_modify_counter_regulator(Name, Opts, #q{regulators = Regs} = Q) ->
             badarg
     end.
 
-check_queue(#q{regulators = Regs0} = Q, TS, S) ->
+check_queue(#queue{regulators = Regs0} = Q, TS, S) ->
     case q_is_empty(Q) of
         true ->
             %% no action necessary
@@ -695,19 +717,19 @@ expand_regulators([], _) ->
 update_regulators(Regs, Q0, S0) ->
     lists:foldl(
       fun(#grp{name = R} = GR, {Q, #st{group_rates = GRs} = S}) ->
-	      GR1 = GR#grp{latest_dispatch = Q#q.latest_dispatch},
+	      GR1 = GR#grp{latest_dispatch = Q#queue.latest_dispatch},
               S1 = S#st{group_rates = update_group(R, GRs, GR1)},
               {Q, S1};
-         (#rr{} = RR, {#q{regulators = Rs} = Q, S}) ->
+         (#rr{} = RR, {#queue{regulators = Rs} = Q, S}) ->
               %% There can be at most one rate regulator
-              Q1 = Q#q{regulators = update_rate_regulator(RR, Rs)},
+              Q1 = Q#queue{regulators = update_rate_regulator(RR, Rs)},
               {Q1, S};
          (#cr{name = R,
               shared = true} = CR, {Q, #st{counters = Cs} = S}) ->
               S1 = S#st{counters = update_counter(R, Cs, CR)},
               {Q, S1};
-         (#cr{name = R} = CR, {#q{regulators = Rs} = Q, S}) ->
-              Q1 = Q#q{regulators = update_counter(R, Rs, CR)},
+         (#cr{name = R} = CR, {#queue{regulators = Rs} = Q, S}) ->
+              Q1 = Q#queue{regulators = update_counter(R, Rs, CR)},
               {Q1, S}
       end, {Q0, S0}, Regs).
 
@@ -717,10 +739,10 @@ include_regulator(R, Regs, S) ->
     [R|expand_regulators(Regs, S)].
 
 
--spec check_regulators([regulator()], timestamp(), #q{}) ->
+-spec check_regulators([regulator()], timestamp(), #queue{}) ->
 			      {integer(), [any()]}.
 %%
-check_regulators(Regs, TS, #q{latest_dispatch = TL}) ->
+check_regulators(Regs, TS, #queue{latest_dispatch = TL}) ->
     check_regulators(Regs, TS, TL, infinity, []).
 
 check_regulators([R|Regs], TS, TL, N, Cs) ->
@@ -761,7 +783,7 @@ check_cr(Name, Incr, Max) ->
             0
     end.
 
--spec dispatch_N(integer() | infinity, [any()], #q{}) -> #q{}.
+-spec dispatch_N(integer() | infinity, [any()], #queue{}) -> #queue{}.
 %%			
 dispatch_N(N, Counters, Q) ->
     {Jobs, Q1} = q_out(N, Q),
@@ -769,18 +791,18 @@ dispatch_N(N, Counters, Q) ->
     Q1.
 
 
-update_queue(#q{name = N} = Q, #st{queues = Qs} = S) ->
+update_queue(#queue{name = N} = Q, #st{queues = Qs} = S) ->
     Q1 = start_timer(Q),
-    S#st{queues = lists:keyreplace(N, #q.name, Qs, Q1)}.
+    S#st{queues = lists:keyreplace(N, #queue.name, Qs, Q1)}.
 
-start_timer(#q{timer = TRef} = Q) when TRef =/= undefined ->
+start_timer(#queue{timer = TRef} = Q) when TRef =/= undefined ->
     Q;
-start_timer(#q{name = Name} = Q) ->
+start_timer(#queue{name = Name} = Q) ->
     case next_time(timestamp(), Q) of
         T when is_integer(T) -> 
             Msg = {check_queue, Name},
             TRef = do_send_after(T, Msg),
-            Q#q{timer = TRef};
+            Q#queue{timer = TRef};
         undefined ->
             Q
     end.
@@ -792,9 +814,9 @@ next_time(TS, TSl, I) ->
 do_send_after(T, Msg) ->
     erlang:send_after(T, self(), Msg).
 
-apply_modifiers(Modifiers, #q{regulators = Rs} = Q) ->
+apply_modifiers(Modifiers, #queue{regulators = Rs} = Q) ->
     Rs1 = [apply_modifiers(Modifiers, R) || R <- Rs],
-    Q#q{regulators = Rs1};
+    Q#queue{regulators = Rs1};
 apply_modifiers(Modifiers, Regulator) ->
     with_modifiers(Modifiers, Regulator, fun apply_damper/4).
 
@@ -807,9 +829,8 @@ with_modifiers(Modifiers, Regulator, F) ->
 	   fun({K, Local, Remote}, R) ->
 		   F(K, Local, Remote, R)
 	   end, Rate, Modifiers),
-    R1 = apply_active_modifiers(Modifiers, R0),
+    R1 = apply_active_modifiers(R0),
     set_rate(R1, Regulator).
-
 
 
 apply_damper(Type, Local, Remote, R) ->
@@ -817,17 +838,48 @@ apply_damper(Type, Local, Remote, R) ->
 	false ->
 	    %% no effect on this regulator
 	    R;
+	Found ->
+	    apply_damper(Type, Found, Local, Remote, R)
+    end.
+
+apply_damper(Type, _Found, 0, [], R) ->
+    apply_corr(Type, 0, R);
+apply_damper(Type, Found, Local, Remote, R) ->
+    case Found of
 	{_, Unit} when is_integer(Unit) ->
             %% The active_modifiers list is kept up-to-date in order 
             %% to support remove_damper().
             Corr = Local * Unit,
 	    apply_corr(Type, Corr, R);
+	{_, LocalUnit, RemoteUnit} ->
+	    LocalCorr = Local * LocalUnit,
+	    RemoteCorr = case RemoteUnit of
+			     {avg, RU} ->
+				 RU * avg_remotes(Remote);
+			     {max, RU} ->
+				 RU * max_remotes(Remote)
+			 end,
+	    apply_corr(Type, LocalCorr + RemoteCorr, R);
 	{_, F} when tuple_size(F) == 2; is_function(F,2) ->
 	    case F(Local, Remote) of
 		Corr when is_integer(Corr) ->
 		    apply_corr(Type, Corr, R)
 	    end
     end.
+
+avg_remotes([]) ->
+    0;
+avg_remotes(L) ->
+    Sum = lists:foldl(fun({_,V}, Acc) -> V + Acc end, 0, L),
+    Sum div length(L).
+
+max_remotes(L) ->
+    lists:foldl(fun({_,V}, Acc) ->
+			erlang:max(V, Acc)
+		end, 0, L).
+
+			      
+
 
 
 remove_damper(Type, _, _, R) ->
@@ -853,18 +905,18 @@ set_rate(R, #cr {} = Reg) -> Reg#cr {rate = R};
 set_rate(R, #grp{} = Reg) -> Reg#grp{rate = R}.
 
 
-apply_active_modifiers(ADs, #rate{preset_limit = Preset} = R) ->
+apply_active_modifiers(#rate{preset_limit = Preset,
+			     active_modifiers = ADs} = R) ->
     Limit = lists:foldl(
 	      fun({_,Corr}, L) ->
-		      L - (Corr*Preset/100)
+		      L - round(Corr*Preset/100)
 	      end, Preset, ADs),
     R#rate{limit = Limit,
-	   interval = interval(Limit),
-	   active_modifiers = ADs}.
+	   interval = interval(Limit)}.
     
 		 
 
-queue_job(TS, From, #q{max_size = MaxSz} = Q, S) ->
+queue_job(TS, From, #queue{max_size = MaxSz} = Q, S) ->
     CurSz = q_info(length, Q),
     if CurSz >= MaxSz ->
             case q_timedout(Q) of
@@ -907,7 +959,7 @@ q_new(Opts) ->
                                                  {mod , jobs_queue},
                                                  {max_time, undefined},
                                                  {max_size, undefined}]],
-    #q{} = q_new(Opts, #q{name = Name,
+    #queue{} = q_new(Opts, #queue{name = Name,
 			  mod = Mod,
 			  max_time = MaxTime,
 			  max_size = MaxSize}, Mod).
@@ -915,37 +967,37 @@ q_new(Opts) ->
 q_new(Options, Q, Mod) ->
     case proplists:get_value(type, Options, fifo) of
         {producer, F} ->
-            Q#q{type = {producer, F}};
+            Q#queue{type = {producer, F}};
         Type ->
-	    Mod:new(Options, Q#q{type = Type})
+	    Mod:new(Options, Q#queue{type = Type})
     end.
 
 
-q_all     (#q{mod = Mod} = Q)     -> Mod:all     (Q).
-q_timedout(#q{mod = Mod} = Q)     -> Mod:timedout(Q).
-q_delete  (#q{mod = Mod} = Q)     -> Mod:delete  (Q).
+q_all     (#queue{mod = Mod} = Q)     -> Mod:all     (Q).
+q_timedout(#queue{mod = Mod} = Q)     -> Mod:timedout(Q).
+q_delete  (#queue{mod = Mod} = Q)     -> Mod:delete  (Q).
 %%
-q_is_empty(#q{type = {producer,_}}) -> false;
-q_is_empty(#q{mod = Mod} = Q)       -> Mod:is_empty(Q).
+q_is_empty(#queue{type = {producer,_}}) -> false;
+q_is_empty(#queue{mod = Mod} = Q)       -> Mod:is_empty(Q).
 %%
-q_out     (infinity, #q{mod = Mod} = Q) ->  Mod:all (Q);
-q_out     (N , #q{mod = Mod} = Q) -> Mod:out     (N, Q).
-q_info    (I , #q{mod = Mod} = Q) -> Mod:info    (I, Q).
+q_out     (infinity, #queue{mod = Mod} = Q) ->  Mod:all (Q);
+q_out     (N , #queue{mod = Mod} = Q) -> Mod:out     (N, Q).
+q_info    (I , #queue{mod = Mod} = Q) -> Mod:info    (I, Q).
 %%
-q_in(TS, From, #q{mod = Mod, oldest_job = OJ} = Q) ->
+q_in(TS, From, #queue{mod = Mod, oldest_job = OJ} = Q) ->
     OJ1 = erlang:min(TS, OJ),    % Works even if OJ==undefined
-    Mod:in(TS, From, Q#q{oldest_job = OJ1}).
+    Mod:in(TS, From, Q#queue{oldest_job = OJ1}).
 
 %% End queue accessor functions.
 %% ===========================================================
 
--spec next_time(TS :: integer(), #q{}) -> integer() | undefined.
+-spec next_time(TS :: integer(), #queue{}) -> integer() | undefined.
 %%
 %% Calculate the delay (in ms) until queue is checked again.
 %%
-next_time(_TS, #q{oldest_job = undefined}) ->
+next_time(_TS, #queue{oldest_job = undefined}) ->
     undefined;
-next_time(TS, #q{latest_dispatch = TS1,
+next_time(TS, #queue{latest_dispatch = TS1,
                  check_interval = I0}) ->
     I = case I0 of
 	    _ when is_integer(I0) -> I0;

@@ -33,6 +33,7 @@
          delete_queue/1,
          info/1,
          queue_info/1,
+	 queue_info/2,
          modify_regulator/4,
          add_counter/2,
          modify_counter/2,
@@ -40,6 +41,7 @@
          add_group_rate/2,
          modify_group_rate/2,
          delete_group_rate/1]).
+
 
 %% @spec ask(Type) -> {ok, Opaque} | {error, Reason}
 %% @doc Asks permission to run a job of Type. Returns when permission granted.
@@ -112,6 +114,9 @@ info(Item) ->
 
 queue_info(Name) ->
     jobs_server:queue_info(Name).
+
+queue_info(Name, Item) ->
+    jobs_server:queue_info(Name, Item).
 
 modify_regulator(Type, QName, RegName, Opts) when Type==counter;Type==rate ->
     jobs_server:modify_regulator(Type, QName, RegName, Opts).

@@ -50,7 +50,7 @@ sample(_T, S) ->
     {is_overload(), S}.
 
 calc(History, #st{levels = Levels} = S) ->
-    {jobs_sampler:calc(time, Levels, History), S}.
+    {[{mnesia,jobs_sampler:calc(time, Levels, History)}], S}.
 
 
 subscriber_loop(Name) ->

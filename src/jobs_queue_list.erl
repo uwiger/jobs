@@ -47,31 +47,31 @@
 
 new(Options, Q) ->
     case proplists:get_value(type, Options, lifo) of
-	lifo -> Q#q{st = []}
+	lifo -> Q#queue{st = []}
     end.
 
-delete(#q{}) -> true.
+delete(#queue{}) -> true.
 
--spec in(timestamp(), job(), #q{}) -> #q{}.
+-spec in(timestamp(), job(), #queue{}) -> #queue{}.
 %%
 %% Enqueue a job reference; return the updated queue
 %%
-in(TS, Job, #q{st = []} = Q) ->
-    Q#q{st = [{TS, Job}], oldest_job = TS};
-in(TS, Job, #q{st = L} = Q) ->
-    Q#q{st = [{TS, Job} | L]}.
+in(TS, Job, #queue{st = []} = Q) ->
+    Q#queue{st = [{TS, Job}], oldest_job = TS};
+in(TS, Job, #queue{st = L} = Q) ->
+    Q#queue{st = [{TS, Job} | L]}.
 
--spec out(N :: integer(), #q{}) -> {[entry()], #q{}}.
+-spec out(N :: integer(), #queue{}) -> {[entry()], #queue{}}.
 %%
 %% Dequeue a batch of N jobs; return the modified queue.
 %%
-out(N, #q{st = L, oldest_job = OJ} = Q) when N >= 0 ->
+out(N, #queue{st = L, oldest_job = OJ} = Q) when N >= 0 ->
     {Out, Rest} = split(N, L),
     OJ1 = case Rest of
 	      [] -> undefined;
 	      _  -> OJ
 	  end,
-    {Out, Q#q{st = Rest, oldest_job = OJ1}}.
+    {Out, Q#queue{st = Rest, oldest_job = OJ1}}.
 
 split(N, L) ->
     split(N, L, []).
@@ -86,57 +86,57 @@ split(0, T, Acc) ->
 
 
 
--spec all(#q{}) -> [entry()].
+-spec all(#queue{}) -> [entry()].
 %%
 %% Return all the job entries in the queue
 %%
-all(#q{st = L}) ->
+all(#queue{st = L}) ->
     L.
 
 
 -type info_item() :: max_time | oldest_job | length.
 
--spec info(info_item(), #q{}) -> any().
+-spec info(info_item(), #queue{}) -> any().
 %%
 %% Return information about the queue.
 %%
-info(max_time  , #q{max_time = T}   ) -> T;
-info(oldest_job, #q{oldest_job = OJ}) -> OJ;
-info(length    , #q{st = L}) ->
+info(max_time  , #queue{max_time = T}   ) -> T;
+info(oldest_job, #queue{oldest_job = OJ}) -> OJ;
+info(length    , #queue{st = L}) ->
     length(L).
     
--spec timedout(#q{}) -> [entry()].
+-spec timedout(#queue{}) -> [entry()].
 %%
 %% Return all entries that have been in the queue longer than MaxTime.
 %%
-timedout(#q{max_time = undefined}) -> [];
-timedout(#q{max_time = TO} = Q) ->
+timedout(#queue{max_time = undefined}) -> [];
+timedout(#queue{max_time = TO} = Q) ->
     timedout(TO, Q).
 
-timedout(_ , #q{oldest_job = undefined}) -> [];
-timedout(TO, #q{st = L} = Q) ->
+timedout(_ , #queue{oldest_job = undefined}) -> [];
+timedout(TO, #queue{st = L} = Q) ->
     Now = timestamp(),
     {Left, Timedout} = lists:splitwith(fun({TS,_}) ->
 					       not(is_expired(TS,Now,TO)) 
 				       end, L),
     OJ = get_oldest_job(Left),
-    {Timedout, Q#q{oldest_job = OJ, st = Left}}.
+    {Timedout, Q#queue{oldest_job = OJ, st = Left}}.
 
 get_oldest_job([]) -> undefined;
 get_oldest_job(L) ->
     element(1, hd(lists:reverse(L))).
 
 
--spec is_empty(#q{}) -> boolean().
+-spec is_empty(#queue{}) -> boolean().
 %%
 %% Check whether the queue is empty.
 %%
-is_empty(#q{st = []}) -> true;
+is_empty(#queue{st = []}) -> true;
 is_empty(_) ->
     false.
 
-empty(#q{} = Q) ->
-    Q#q{oldest_job = undefined, st = []}.
+empty(#queue{} = Q) ->
+    Q#queue{oldest_job = undefined, st = []}.
 
 is_expired(TS, Now, TO) ->
     MS = Now - TS,

@@ -84,4 +84,4 @@ minmax([H|T]) ->
 
 calc(History, #st{levels = Levels} = St) ->
     L = jobs_sampler:calc(value, Levels, History),
-    {L, St}.
+    {[{cpu,L}], St}.
