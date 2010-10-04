@@ -10,9 +10,9 @@ msg_test_() ->
     Rate = 100,
     {foreach,
      fun() -> with_msg_sampler(Rate) end,
-     fun stop_jobs/1,
+     fun(_) -> stop_jobs() end,
      [
-      fun apply_feedback/1
+      {with, [fun apply_feedback/1]}
      ]}.
 
 
@@ -36,7 +36,7 @@ with_msg_sampler(Rate) ->
     application:start(jobs),
     Rate.
 
-stop_jobs(_) ->
+stop_jobs() ->
     application:stop(jobs),
     application:stop(gproc).
 
