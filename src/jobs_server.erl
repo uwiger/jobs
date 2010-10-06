@@ -67,7 +67,8 @@
 -include("jobs.hrl").
 -record(st, {queues      = []  :: [#queue{}],
 	     group_rates = []  :: [#grp{}],
-	     counters    = []  :: [#cr{}],  
+	     counters    = []  :: [#cr{}], 
+	     monitors,
 	     q_select          :: atom(),
 	     q_select_st       :: any(),
 	     default_queue,
@@ -89,20 +90,7 @@ ask() ->
 -spec ask(job_class()) -> {ok, reg_obj()} | {error, rejected | timeout}.
 %%
 ask(Type) ->
-    case call(?SERVER, {ask, Type, timestamp()}, infinity) of
-        {ok, Counters} ->
-            [try gproc:reg(?COUNTER(C), V)
-             catch
-                 error:badarg ->
-		     %% failure might mean that we have these counters
-		     %% already. Let's try to increment the counters instead;
-		     %% if that doesn't work, the call will fail.
-                     gproc:update_counter({c,l,C},V)
-             end || {C,V} <- Counters],
-            {ok, Counters};
-        Other ->
-            Other
-    end.
+    call(?SERVER, {ask, Type, timestamp()}, infinity).
 
 -spec run(fun(() -> X)) -> X.
 %%
@@ -124,9 +112,8 @@ run(Type, Fun) when is_function(Fun, 0) ->
 
 -spec done(reg_obj()) -> ok.
 %%
-done(Counters) ->
-    [catch gproc:unreg(?COUNTER(C)) || {C,_} <- Counters],
-    ok.
+done(Opaque) ->
+    gen_server:cast(?MODULE, {done, Opaque}).
 
 -spec add_queue(queue_name(), [option()]) -> ok.
 %%		       
@@ -241,7 +228,7 @@ init(Opts) ->
     Groups = init_groups(Gs),
     Counters = init_counters(Cs),
     S1 = S0#st{group_rates = Groups,
-                  counters    = Counters},
+	       counters    = Counters},
     Queues = init_queues(Qs, S1),
     Default0 = case Queues of
                    [] ->
@@ -250,9 +237,10 @@ init(Opts) ->
                        N
                end,
     Default = get_value(default_queue, Opts, Default0),
-    {ok, set_info(S1#st{queues        = Queues,
-                           default_queue = Default,
-                           interval      = Interval})}.
+    {ok, set_info(lift_counters(S1#st{queues        = Queues,
+				      default_queue = Default,
+				      interval      = Interval,
+				      monitors = ets:new(monitors,[set])}))}.
 
 
 
@@ -330,9 +318,8 @@ init_regulators(Rs, #queue{name = Qname} = Q) ->
                         {init_rate_regulator(Opts, RR0), {Rx+1, Cx}};
 		   ({counter, Opts}, {Rx,Cx}) when is_list(Opts) ->
 			Name0 = {counter,Qname,Cx},
-			CR0 = #cr{name = Name0},
-			Name = get_value(name, Opts, CR0#cr.name),
-			{init_counter(Opts, CR0#cr{name = Name}), {Rx,Cx+1}};
+			Name = get_value(name, Opts, Name0),
+			{init_counter(Opts, #cr{name = Name}), {Rx,Cx+1}};
 		   ({group_rate, R} = Link, Acc) when is_atom(R) ->
 			{Link, Acc}
 		   %% ({counter, R} = Link, Acc) when is_atom(R) ->
@@ -363,30 +350,57 @@ init_rate_regulator(Opts, #rr{rate = R} = RR) ->
 init_counter(Opts) ->
     init_counter(Opts, #cr{}).
 
-init_counter(Opts, #cr{name = Name} = CR0) ->
+init_counter(Opts, #cr{} = CR0) ->
     R = #rate{},
     Limit = get_value(limit, Opts, R#rate.limit),
     Interval = get_value(interval, Opts, ?COUNTER_SAMPLE_INTERVAL),
     Modifiers = get_value(modifiers, Opts, R#rate.modifiers),
-    case gproc:where(?AGGR(Name)) of
-	P when P == self() ->
-	    ok;  % ok to reuse an aggregated counter
-	undefined ->
-	    gproc:reg(?AGGR(Name))
-    end,
     CR0#cr{rate = #rate{limit = Limit,
 			interval = Interval,
 			preset_limit = Limit,
 			modifiers = Modifiers}}.
 
+lift_counters(#st{queues = Qs} = S) ->
+    lists:foldl(fun do_lift_counters/2, S, Qs).
+
+do_lift_counters(#queue{name = Name, regulators = Rs} = Q,
+		 #st{queues = Queues, counters = Counters} = S) ->
+    case [R || #cr{} = R <- Rs] of
+	[] ->
+	    S;
+	[_|_] = CRs ->
+	    {Rs1, Cs1} = lists:foldl(fun(CR,Acc) ->
+					     mk_counter_alias(CR,Acc,Name)
+				     end, {Rs, Counters}, CRs),
+	    Q1 = Q#queue{regulators = Rs1},
+	    Queues1 = lists:keyreplace(Name, #queue.name, Queues, Q1),
+	    S#st{queues = Queues1, counters = Cs1}
+    end.
+
+mk_counter_alias(#cr{name = Name,
+		     increment = I} = CR, {Rs, Cs}, QName) ->
+    Alias = #counter{name = Name, increment = I},
+    Rs1 = lists_replace(CR, Rs, Alias),
+    case lists:keyfind(Name, #cr.name, Cs) of
+	false ->
+	    {Rs1, [CR#cr{queues = [QName]}|Cs]};
+	#cr{} = Existing ->
+	    Qs = [QName|Existing#cr.queues -- [QName]],
+	    {Rs1, lists:keyreplace(Name, #cr.name, Cs,
+				   Existing#cr{queues = Qs})}
+    end.
+
+lists_replace(X, [X | T], With) -> [With | T];
+lists_replace(X, [A | T], With) -> [A | lists_replace(X, T, With)].
+
 
 -spec interval(integer()) -> undefined | integer().
 %%
-%% Return the sampling interval (in us) based on max frequency.
+%% Return the sampling interval (in ms) based on max frequency.
 %% If max frequency is 0, we choose what corresponds to an unlimited interval
 %%
 interval(0    ) -> undefined;  % greater than any int()
-interval(Limit) -> 1000000 div Limit.
+interval(Limit) -> 1000 div Limit.
 
 
 set_info(S) ->
@@ -526,9 +540,30 @@ i_handle_call({modify_group_rate, Name, Opts},_, #st{group_rates = Gs} = S) ->
 i_handle_call(_Req, _, S) ->
     {reply, badarg, S}.
 
+handle_cast({done, Pid, {Ref,Cs}}, #st{monitors = Mons} = S) ->
+    case ets:lookup(Mons, {Pid,Ref}) of
+	[] ->
+	    %% huh?
+	    io:fwrite("Didn't find monitor for Pid ~p~n", [Pid]);
+	[_] ->
+	    erlang:demonitor(Ref, [flush]),
+	    ets:delete(Mons, {Pid,Ref})
+    end,
+    {Revisit, S1} = restore_counters(Cs, S),
+    {noreply, revisit_queues(Revisit, S1)};
 handle_cast(_Msg, S) ->
     {noreply, S}.
 
+handle_info({'DOWN', Ref, _, Pid, _}, #st{monitors = Mons} = S) ->
+    case ets:lookup(Mons, {Pid,Ref}) of
+	[{_, QName}] ->
+	    ets:delete(Mons, {Pid,Ref}),
+	    Cs = get_counters(QName, S),  %% TODO! implement function
+	    {Revisit, S1} = restore_counters(Cs, S),
+	    {noreply, revisit_queues(Revisit, S1)};
+	[] ->
+	    {noreply, S}
+    end;
 handle_info({check_queue, Name}, #st{queues = Qs} = S) ->
     case get_queue(Name, Qs) of
         #queue{} = Q ->
@@ -538,10 +573,12 @@ handle_info({check_queue, Name}, #st{queues = Qs} = S) ->
                 {0, _, _} ->
                     {noreply, update_queue(Q1, S)};
                 {N, Counters, Regs} ->
-                    Q2 = dispatch_N(N, Counters, Q1),
+                    {Jobs, Q2} = dispatch_N(N, Counters, Q1, S),
+		    
                     {Q3, S3} = update_regulators(
 				 Regs, Q2#queue{latest_dispatch = TS}, S),
-                    {noreply, update_queue(Q3, S3)}
+                    {noreply, update_counters(Jobs, Counters, 
+					      update_queue(Q3, S3))}
             end;
         _ ->
             {noreply, S}
@@ -589,31 +626,6 @@ do_get_queue_info(rate_limit, #queue{regulators = Rs}) ->
 	false ->
 	    undefined
     end.
-
-
-%% rec_info(R) ->
-%%     Zip = fun(Attrs) ->
-%% 		  lists:zipwith(fun(A,P) -> {A, rec_info(element(P,R))} end, 
-%% 				Attrs, lists:seq(2,tuple_size(R)))
-%% 	  end,
-%%     case R of
-%% 	#rr {} -> Zip(record_info(fields,rr));
-%% 	#cr {} -> Zip(record_info(fields,cr));
-%% 	#grp{} -> Zip(record_info(fields,grp));
-%% 	#queue  {} -> Zip(record_info(fields,q));
-%% 	#rate{} -> Zip(record_info(fields,rate));
-%% 	L when is_list(L) ->
-%% 	    [rec_info(X) || X <- L];
-%% 	Other -> Other
-%%     end.
-
-
-%% extract_name(L) ->
-%%     Name = proplists:get_value(name, L, '#no_name#'),
-%%     {Name, lists:keydelete(name, 1, L)}.
-
-                     
-
 
 get_queue(Name, Qs) ->
     lists:keyfind(Name, #queue.name, Qs).
@@ -695,16 +707,39 @@ check_queue(#queue{regulators = Regs0} = Q, TS, S) ->
 
 
 
-expand_regulators([{group_rate, R}|Regs], #st{group_rates = GR} = S) ->
-    include_regulator(get_group(R, GR), Regs, S);
-expand_regulators([{counter, C}|Regs], #st{counters = Cs} = S) ->
-    include_regulator(get_counter(C, Cs), Regs, S);
+expand_regulators([{group_rate, R}|Regs], #st{group_rates = GRs} = S) ->
+    case get_group(R, GRs) of
+	false       -> expand_regulators(Regs, S);
+	#grp{} = GR -> [GR|expand_regulators(Regs, S)]
+    end;
+expand_regulators([#counter{name = C,
+			    increment = I}|Regs], #st{counters = Cs} = S) ->
+    case get_counter(C, Cs) of
+	false      -> expand_regulators(Regs, S);
+	#cr{} = CR -> [{CR,I}|expand_regulators(Regs, S)]
+    end;
 expand_regulators([#rr{} = R|Regs], S) ->
     [R|expand_regulators(Regs, S)];
 expand_regulators([#cr{} = R|Regs], S) ->
     [R|expand_regulators(Regs, S)];
 expand_regulators([], _) ->
     [].
+
+get_counters(QName, #st{queues = Qs} = S) ->
+    case get_queue(QName, Qs) of
+	false ->
+	    [];
+	#queue{regulators = Rs} ->
+	    CRs = expand_regulators([C || #counter{} = C <- Rs], S),
+	    [{C, cr_increment(Ig,Il)} ||
+		{#cr{name = C, increment = Ig}, Il} <- CRs]
+    end.
+
+include_regulator(false, _, Regs, S) ->
+    expand_regulators(Regs, S);
+include_regulator(R, Local, Regs, S) ->
+    [{R, Local}|expand_regulators(Regs, S)].
+
 
 update_regulators(Regs, Q0, S0) ->
     lists:foldl(
@@ -716,19 +751,16 @@ update_regulators(Regs, Q0, S0) ->
               %% There can be at most one rate regulator
               Q1 = Q#queue{regulators = update_rate_regulator(RR, Rs)},
               {Q1, S};
-         (#cr{name = R,
-              shared = true} = CR, {Q, #st{counters = Cs} = S}) ->
-              S1 = S#st{counters = update_counter(R, Cs, CR)},
-              {Q, S1};
-         (#cr{name = R} = CR, {#queue{regulators = Rs} = Q, S}) ->
-              Q1 = Q#queue{regulators = update_counter(R, Rs, CR)},
-              {Q1, S}
+	 (_, Acc) ->
+	      Acc
+         %% (#cr{name = R,
+         %%      shared = true} = CR, {Q, #st{counters = Cs} = S}) ->
+         %%      S1 = S#st{counters = update_counter(R, Cs, CR)},
+         %%      {Q, S1};
+         %% (#cr{name = R} = CR, {#queue{regulators = Rs} = Q, S}) ->
+         %%      Q1 = Q#queue{regulators = update_counter(R, Rs, CR)},
+         %%      {Q1, S}
       end, {Q0, S0}, Regs).
-
-include_regulator(false, Regs, S) ->
-    expand_regulators(Regs, S);
-include_regulator(R, Regs, S) ->
-    [R|expand_regulators(Regs, S)].
 
 
 -spec check_regulators([regulator()], timestamp(), #queue{}) ->
@@ -745,43 +777,94 @@ check_regulators([R|Regs], TS, TL, N, Cs) ->
 	#grp{rate = #rate{interval = I}, latest_dispatch = TLg} ->
 	    N1 = check_rr(I, TS, TLg),
 	    check_regulators(Regs, TS, TL, erlang:min(N, N1), Cs);
-	#cr{name = Name, increment = I, rate = #rate{limit = Max}} ->
-	    C1 = check_cr(Name, I, Max),
+	{#cr{} = CR, Il} ->
+	    #cr{name = Name,
+		value = Val,
+		increment = Ig,
+		rate = #rate{limit = Max}} = CR,
+	    I = cr_increment(Ig, Il),
+	    C1 = check_cr(Val, I, Max),
 	    Cs1 = if C1 == 0 ->
 			  Cs;
 		     true ->
-			  [{Name, C1}|Cs]
+			  [{Name, I}|Cs]
 		  end,
 	    check_regulators(Regs, TS, TL, erlang:min(C1, N), Cs1)
     end;
 check_regulators([], _, _, N, Cs) ->
     {N, Cs}.
 
+cr_increment(Ig, undefined) -> Ig;
+cr_increment(_ , Il) when is_integer(Il) -> Il.
+    
+
 check_rr(undefined, _, _) ->
     0;
 check_rr(I, TS, TL) ->
     trunc((TS - TL)/I).
 
-check_cr(Name, Incr, Max) ->
-    try Cur = gproc:get_value(?AGGR(Name)),
-	 case Max - Cur of
-	     N when N > 0 ->
-		 N div Incr;
-	     _ ->
-		 0
-	 end
-    catch
-        error:_ ->
-            0
+check_cr(Val, I, Max) ->
+    case Max - Val of
+	N when N > 0 ->
+	    N div I;
+	_ ->
+	    0
     end.
 
--spec dispatch_N(integer() | infinity, [any()], #queue{}) -> #queue{}.
+-spec dispatch_N(integer() | infinity, [any()], #queue{}, #st{}) -> #queue{}.
 %%			
-dispatch_N(N, Counters, Q) ->
-    {Jobs, Q1} = q_out(N, Q),
-    [approve(Client, Counters) || {_, Client} <- Jobs],
-    Q1.
+dispatch_N(N, Counters, Q, #st{monitors = Mons}) ->
+    {Jobs, _Q1} = Res = q_out(N, Q),
+    lists:foreach(
+      fun({_, {Pid,_} = Client}) ->
+	      Ref = erlang:monitor(process, Pid),
+	      approve(Client, {Ref, Counters}),
+	      ets:insert(Mons, {{Pid,Ref}, Q#queue.name})
+      end, Jobs),
+    %% [approve(Client, Counters) || {_, Client} <- Jobs],
+    Res.
 
+update_counters(Jobs, Cs, 
+		#st{counters = Counters} = S) ->
+    N = length(Jobs),
+    %% Clients = [{{Pid, erlang:monitor(process, Pid)}, QName} ||
+    %% 		  {_, {Pid,_}} <- Jobs],
+    %% ets:insert(Mons, Clients),
+    Counters1 =
+	lists:foldl(
+	  fun({C,I}, Acc) ->
+		  #cr{value = Old} = CR =
+		      lists:keyfind(C, #cr.name, Acc),
+		  %% io:fwrite("updating #cr{name = ~p}; Old=~p, I=~p, N=~p~n",
+		  %% 	    [C,Old,I,N]),
+		  CR1 = CR#cr{value = Old + I*N},
+		  lists:keyreplace(C, #cr.name, Acc, CR1)
+	  end, Counters, Cs),
+    S#st{counters = Counters1}.
+
+
+restore_counters(Cs, #st{} = S) ->
+    lists:foldl(fun restore_counter/2, {[], S}, Cs).
+
+restore_counter({C, I}, {Revisit, #st{counters = Counters} = S}) ->
+    #cr{value = Val, queues = Qs, rate = #rate{limit = Max}} = CR =
+	lists:keyfind(C, #cr.name, Counters),
+    CR1 = CR#cr{value = Val - I},
+    Counters1 = lists:keyreplace(C, #cr.name, Counters, CR1),
+    S1 = S#st{counters = Counters1},
+    if Val == Max, I > 0 ->
+	    {union(Qs, Revisit), S1};
+       true ->
+	    {Revisit, S1}
+    end.
+
+union(L1, L2) ->
+    (L1 -- L2) ++ L2.
+
+revisit_queues(Qs, S) ->	     
+    [self() ! {check_queue, Q} || Q <- Qs],
+    S.
+      
 
 update_queue(#queue{name = N} = Q, #st{queues = Qs} = S) ->
     Q1 = start_timer(Q),
@@ -990,7 +1073,7 @@ q_in(TS, From, #queue{mod = Mod, oldest_job = OJ} = Q) ->
 next_time(_TS, #queue{oldest_job = undefined}) ->
     undefined;
 next_time(TS, #queue{latest_dispatch = TS1,
-                 check_interval = I0}) ->
+		     check_interval = I0}) ->
     I = case I0 of
 	    _ when is_integer(I0) -> I0;
 	    {M,F, As} ->

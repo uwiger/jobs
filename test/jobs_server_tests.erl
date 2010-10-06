@@ -3,20 +3,19 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
-
 rate_test_() ->
      {foreachx,
       fun(Type) -> start_test_server(Type) end,
       fun(_, _) -> stop_server() end,
-      [{{rate,1}, fun(O,_) -> [fun() -> serial(1,2,2) end] end}
-       , {{rate,   5}, fun(O,_) -> [fun() -> serial(5,5,1) end] end}
+      [{{rate,1}, fun(_,_) -> [fun() -> serial(1,2,2) end] end}
+       , {{rate,   5}, fun(_,_) -> [fun() -> serial(5,5,1) end] end}
        %% , {{rate, 100}, fun(O,_) -> [fun() -> rate_test(O,1) end] end}
-       , {{rate, 400}, fun(O,_) -> [fun() -> par_run(400,400,1) end] end}
-       , {{rate, 600}, fun(O,_) -> [fun() -> par_run(600,600,1) end] end}
-       , {{rate,1000}, fun(O,_) -> [fun() -> par_run(1000,1000,1) end] end}
+       , {{rate, 400}, fun(_,_) -> [fun() -> par_run(400,400,1) end] end}
+       , {{rate, 600}, fun(_,_) -> [fun() -> par_run(600,600,1) end] end}
+       , {{rate,1000}, fun(_,_) -> [fun() -> par_run(1000,1000,1) end] end}
        %% , {[{rate,100},
        %% 	   {group,50}], fun(O,_) -> [fun() -> max_rate_test(O,1) end] end}
-       , {{count,3}, fun(O,_) -> [fun() -> counter_run(30,1) end] end}
+       , {{count,3}, fun(_,_) -> [fun() -> counter_run(30,1) end] end}
       ]}.
 
 
@@ -43,7 +42,7 @@ counter_run(N, Target) ->
 		 end),
     ?debugVal({T,Ts}).
 
-time_eval(R, N, T, Ts, Expected) ->
+time_eval(_R, _N, T, Ts, Expected) ->
     [{Hd,_}|Tl] = lists:sort(Ts),
     Diffs = [X-Hd || {X,_} <- Tl],
     Ratio = T/Expected,
@@ -83,20 +82,23 @@ collect([{_P,Ref}|Ps]) ->
     end;
 collect([]) ->
     [].
-			       
 
-start_test_server({rate,Rate}) ->
-    start_with_conf([{queues, [{q, [{regulators,
-				     [{rate,[
-					     {limit, Rate}]
-				      }]}
-				    %% , {mod, jobs_queue_list}
-				   ]}
-			      ]}
-		    ]),
+start_test_server(Conf) ->
+    start_test_server(true, Conf).
+
+start_test_server(Silent, {rate,Rate}) ->
+    start_with_conf(Silent, [{queues, [{q, [{regulators,
+					     [{rate,[
+						     {limit, Rate}]
+					      }]}
+					    %% , {mod, jobs_queue_list}
+					   ]}
+				      ]}
+			    ]),
     Rate;
-start_test_server([{rate,Rate},{group,Grp}]) ->
-    start_with_conf([{group_rates, [{gr, [{limit, Grp}]}]},
+start_test_server(Silent, [{rate,Rate},{group,Grp}]) ->
+    start_with_conf(Silent,
+		    [{group_rates, [{gr, [{limit, Grp}]}]},
 		     {queues, [{q, [{regulators,
 				     [{rate,[{limit, Rate}]},
 				      {group_rate, gr}]}
@@ -104,8 +106,9 @@ start_test_server([{rate,Rate},{group,Grp}]) ->
 			      ]}
 		    ]),
     Grp;
-start_test_server({count, Count}) ->
-    start_with_conf([{queues, [{q, [{regulators,
+start_test_server(Silent, {count, Count}) ->
+    start_with_conf(Silent,
+		    [{queues, [{q, [{regulators,
 				     [{counter,[
 						{limit, Count}
 					       ]
@@ -114,18 +117,20 @@ start_test_server({count, Count}) ->
 			      ]}
 		    ]).
 
-start_with_conf(Conf) ->
+start_with_conf(Silent, Conf) ->
     application:unload(jobs),
     application:load(jobs),
     [application:set_env(jobs, K, V) ||	{K,V} <- Conf],
-    error_logger:delete_report_handler(error_logger_tty_h),
-    application:start(gproc),
+    if Silent == true ->
+	    error_logger:delete_report_handler(error_logger_tty_h);
+       true ->
+	    ok
+    end,
     application:start(jobs).
 
 
 stop_server() ->
-    application:stop(jobs),
-    application:stop(gproc).
+    application:stop(jobs).
 
 tc(F) ->
     T1 = erlang:now(),
@@ -143,7 +148,7 @@ one_job(time) ->
     fun timestamp/0;
 one_job(count) ->
     fun() ->
-	    gproc:lookup_local_aggr_counter({jobs_server,{counter,q,1}})
+	    1
     end.
 
 

@@ -51,6 +51,8 @@
 	       modifiers = [],
 	       active_modifiers = []}).
 
+-record(counter, {name, increment = undefined}).
+
 -record(rr,
         %% Rate-based regulation
         {name,
@@ -65,7 +67,9 @@
         %% Counter-based regulation
         {name,
          increment = 1,
+	 value = 0,
 	 rate = #rate{},
+	 queues = [],
          % limit        = 5,
          % interval     = 50,
 	 % modifiers    = []      :: [{atom(),integer()}],

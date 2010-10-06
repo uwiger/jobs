@@ -32,13 +32,11 @@ with_msg_sampler(Rate) ->
 			     ]}
 		 ]
     ],
-    application:start(gproc),
     application:start(jobs),
     Rate.
 
 stop_jobs() ->
-    application:stop(jobs),
-    application:stop(gproc).
+    application:stop(jobs).
 
 apply_feedback(Rate) ->
     ?assertEqual(get_rate(), Rate),
