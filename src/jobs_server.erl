@@ -801,7 +801,7 @@ cr_increment(_ , Il) when is_integer(Il) -> Il.
 check_rr(undefined, _, _) ->
     0;
 check_rr(I, TS, TL) ->
-    trunc((TS - TL)/I).
+    trunc((TS - TL)/(I*1000)).
 
 check_cr(Val, I, Max) ->
     case Max - Val of
