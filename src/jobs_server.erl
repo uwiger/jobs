@@ -496,6 +496,16 @@ i_handle_call({modify_counter, CName, Opts}, _, #st{counters = Cs} = S) ->
                     {reply, badarg, S}
             end
     end;
+i_handle_call({delete_counter, Name}, _, #st{counters = Cs} = S) ->
+    case get_counter(Name, Cs) of
+	false ->
+	    {reply, false, S};
+	#cr{} ->
+	    %% The question is whether we should also delete references
+	    %% to the queue? It seems like we should...
+	    Cs1 = lists:keydelete(Name, #cr.name, Cs),
+	    {reply, true, S#st{counters = Cs1}}
+    end;
 i_handle_call({add_counter, Name, Opts}=Req, _, #st{counters = Cs} = S) ->
     case get_counter(Name, Cs) of
         false ->

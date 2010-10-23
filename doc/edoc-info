@@ -1,0 +1,5 @@
+{application,jobs}.
+{packages,[]}.
+{modules,[jobs,jobs_app,jobs_info,jobs_lib,jobs_queue,jobs_queue_list,
+          jobs_sampler,jobs_sampler_cpu,jobs_sampler_history,
+          jobs_sampler_mnesia,jobs_server]}.

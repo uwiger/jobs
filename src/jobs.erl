@@ -17,9 +17,10 @@
 %%-------------------------------------------------------------------
 %% File    : jobs.erl
 %% @author  : Ulf Wiger <ulf.wiger@erlang-solutions.com>
-%% @end
-%% Description : 
+%% @doc
+%% This is the public API of the JOBS framework.
 %%
+%% @end
 %% Created : 15 Jan 2010 by Ulf Wiger <ulf.wiger@erlang-solutions.com>
 %%-------------------------------------------------------------------
 -module(jobs).
@@ -90,19 +91,42 @@ done(Opaque) ->
 run(Queue, F) when is_function(F, 0) ->
     jobs_server:run(Queue, F).
 
-
+%% @spec add_queue(Name::any(), Options::[{Key,Value}]) -> ok
+%% @doc Installs a new queue in the load regulator on the current node.
+%% @end
+%%
 add_queue(Name, Options) ->
     jobs_server:add_queue(Name, Options).
 
+%% @spec delete_queue(Name) -> boolean()
+%% @doc Deletes the named queue from the load regulator on the current node.
+%% Returns `true' if there was in fact such a queue; `false' otherwise.
+%% @end
+%%
 delete_queue(Name) ->
     jobs_server:delete_queue(Name).
 
+%% @spec add_counter(Name, Options) -> ok
+%% @doc Adds a named counter to the load regulator on the current node.
+%% Fails if there already is a counter the name `Name'.
+%% @end
+%%
 add_counter(Name, Options) ->
     jobs_server:add_counter(Name, Options).
 
+%% @spec delete_counter(Name) -> boolean()
+%% @doc Deletes a named counter from the load regulator on the current node.
+%% Returns `true' if there was in fact such a counter; `false' otherwise.
+%% @end
+%%
 delete_counter(Name) ->
     jobs_server:delete_counter(Name).
 
+%% @spec add_group_rate(Name, Options) -> ok
+%% @doc Adds a group rate regulator to the load regulator on the current node.
+%% Fails if there is already a group rate regulator of the same name.
+%% @end
+%%
 add_group_rate(Name, Options) ->
     jobs_server:add_group_rate(Name, Options).
 
