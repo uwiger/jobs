@@ -72,7 +72,6 @@
 	     q_select          :: atom(),
 	     q_select_st       :: any(),
 	     default_queue,
-	     interval    = 50  :: integer(),
 	     info_f}).
 
 
@@ -203,10 +202,28 @@ start_link() ->
 
 -spec start_link([option()]) -> {ok, pid()}.
 %%
-start_link(Opts) when is_list(Opts) ->
+start_link(Opts0) when is_list(Opts0) ->
+    Opts = expand_opts(Opts0),
     gen_server:start_link({local,?MODULE}, ?MODULE, Opts, []).
 
 %% Server-side callbacks and helpers
+
+-spec expand_opts([option()]) -> [option()].
+%%
+expand_opts([{config, F}|Opts]) ->
+    case file:script(F) of
+	{ok, NewOpts} ->
+	    NewOpts ++ expand_opts(Opts);
+	{error, Reason} ->
+	    erlang:error(Reason, [{config,F}])
+    end;
+expand_opts([H|T]) ->
+    [H|expand_opts(T)];
+expand_opts([]) ->
+    [].
+
+
+
 
 -spec standard_modifiers() -> [q_modifier()].
 %%
@@ -219,12 +236,11 @@ standard_modifiers() ->
 init(Opts) ->
     process_flag(priority,high),
     S0 = #st{},
-    [Qs, Gs, Cs, Interval] =
+    [Qs, Gs, Cs] =
 	[get_value(K,Opts,Def) 
 	 || {K,Def} <- [{queues     , [{default,[]}]},
 			{group_rates, []},
-			{counters   , []},
-			{interval   , S0#st.interval}]],
+			{counters   , []}]],
     Groups = init_groups(Gs),
     Counters = init_counters(Cs),
     S1 = S0#st{group_rates = Groups,
@@ -239,7 +255,6 @@ init(Opts) ->
     Default = get_value(default_queue, Opts, Default0),
     {ok, set_info(lift_counters(S1#st{queues        = Queues,
 				      default_queue = Default,
-				      interval      = Interval,
 				      monitors = ets:new(monitors,[set])}))}.
 
 
@@ -273,7 +288,7 @@ init_queue({Name, Opts}, S) ->
     calculate_check_interval(Q1, S).
 
 calculate_check_interval(#queue{regulators = Rs,
-                            check_interval = undefined} = Q, S) ->
+				check_interval = undefined} = Q, S) ->
     Regs = expand_regulators(Rs, S),
     I = lists:foldl(
           fun(R, Acc) ->
@@ -822,7 +837,16 @@ check_cr(Val, I, Max) ->
     end.
 
 -spec dispatch_N(integer() | infinity, [any()], #queue{}, #st{}) -> #queue{}.
-%%			
+%%
+dispatch_N(N, _Counters, #queue{name = QName, 
+				type = {producer, F}} = Q,
+	   #st{monitors = Mons}) ->
+    Jobs = [spawn_monitor(F) || _ <- lists:seq(1,N)],
+    lists:foreach(
+      fun({Pid,Ref}) ->
+	      ets:insert(Mons, {{Pid,Ref}, QName})
+      end, Jobs),
+    {Jobs, Q};
 dispatch_N(N, Counters, Q, #st{monitors = Mons}) ->
     {Jobs, _Q1} = Res = q_out(N, Q),
     lists:foreach(
@@ -1039,23 +1063,21 @@ select_queue(Type, _, #st{q_select = M, q_select_st = MS, info_f = I} = S) ->
 %% The callback module must implement the functions below.
 %%
 q_new(Opts) ->
-    [Name, Mod, MaxTime, MaxSize] = 
+    [Name, Mod, Type, MaxTime, MaxSize] = 
         [get_value(K, Opts, Def) || {K, Def} <- [{name, undefined},
                                                  {mod , jobs_queue},
+						 {type, fifo},
                                                  {max_time, undefined},
                                                  {max_size, undefined}]],
     #queue{} = q_new(Opts, #queue{name = Name,
-			  mod = Mod,
-			  max_time = MaxTime,
-			  max_size = MaxSize}, Mod).
+				  mod = Mod,
+				  type = Type,
+				  max_time = MaxTime,
+				  max_size = MaxSize}, Mod).
 
 q_new(Options, Q, Mod) ->
-    case proplists:get_value(type, Options, fifo) of
-        {producer, F} ->
-            Q#queue{type = {producer, F}};
-        Type ->
-	    Mod:new(Options, Q#queue{type = Type})
-    end.
+    Mod:new(Options, Q).
+
 
 
 q_all     (#queue{mod = Mod} = Q)     -> Mod:all     (Q).
@@ -1065,13 +1087,21 @@ q_delete  (#queue{mod = Mod} = Q)     -> Mod:delete  (Q).
 q_is_empty(#queue{type = {producer,_}}) -> false;
 q_is_empty(#queue{mod = Mod} = Q)       -> Mod:is_empty(Q).
 %%
-q_out     (infinity, #queue{mod = Mod} = Q) ->  Mod:all (Q);
+q_out     (infinity, #queue{mod = Mod} = Q)  -> Mod:all (Q);
+q_out     (N , #queue{type = {producer, F}}) -> q_prod_out(N,F);
 q_out     (N , #queue{mod = Mod} = Q) -> Mod:out     (N, Q).
 q_info    (I , #queue{mod = Mod} = Q) -> Mod:info    (I, Q).
 %%
 q_in(TS, From, #queue{mod = Mod, oldest_job = OJ} = Q) ->
     OJ1 = erlang:min(TS, OJ),    % Works even if OJ==undefined
     Mod:in(TS, From, Q#queue{oldest_job = OJ1}).
+
+q_prod_out(N, F) when N > 0 ->
+    F(),
+    q_prod_out(N-1, F);
+q_prod_out(0, _) ->
+    [].
+
 
 %% End queue accessor functions.
 %% ===========================================================

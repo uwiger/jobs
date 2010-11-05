@@ -1,13 +1,16 @@
 
 
-#The jobs application#
+<h1>The jobs application</h1>
+
 jobs - a Job scheduler for load regulation
 
 ===========================================
 
 
 Jobs is a job scheduler for load regulation of Erlang applications.
+
 Copyright © 2010 Erlang Solutions Ltd.
+
 __Version:__ 0.1
 
 Jobs is a job scheduler for load regulation of Erlang applications.
@@ -17,7 +20,9 @@ Queues can be added and modified at runtime, and customizable
 "samplers" propagate load status across all nodes in the system.
 
 
-##Modules##
+<h2 class="indextitle">Modules</h2>
+
+
 
 <table width="100%" border="0" summary="list of modules">
 <tr><td><a href="jobs.md" class="module">jobs</a></td></tr>
@@ -31,3 +36,4 @@ Queues can be added and modified at runtime, and customizable
 <tr><td><a href="jobs_sampler_history.md" class="module">jobs_sampler_history</a></td></tr>
 <tr><td><a href="jobs_sampler_mnesia.md" class="module">jobs_sampler_mnesia</a></td></tr>
 <tr><td><a href="jobs_server.md" class="module">jobs_server</a></td></tr></table>
+
