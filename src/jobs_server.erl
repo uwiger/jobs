@@ -60,8 +60,6 @@
          code_change/3]).
 
 
--compile(export_all).
-
 -import(proplists, [get_value/3]).
 
 -include("jobs.hrl").
@@ -276,6 +274,8 @@ init_queue({Name, standard_counter, N}, S) when is_integer(N), N > 0 ->
                            {modifiers, standard_modifiers()}]
                          }]
                        }]}, S);
+init_queue({Name, Action}, _S) when Action==approve; Action==reject ->
+    #queue{name = Name, type = Action};
 init_queue({Name, producer, F, Opts}, S) ->
     init_queue({Name, [{type, {producer, F}} | Opts]}, S);
 init_queue({Name, Opts}, S) ->
@@ -334,7 +334,10 @@ init_regulators(Rs, #queue{name = Qname} = Q) ->
 		   ({counter, Opts}, {Rx,Cx}) when is_list(Opts) ->
 			Name0 = {counter,Qname,Cx},
 			Name = get_value(name, Opts, Name0),
-			{init_counter(Opts, #cr{name = Name}), {Rx,Cx+1}};
+			{init_counter(Opts, #cr{name = Name,
+						owner = Qname}), {Rx,Cx+1}};
+		   ({named_counter, Name, Incr}, {Rx,Cx}) when is_integer(Incr) ->
+			{#counter{name = Name, increment = Incr}, {Rx,Cx+1}};
 		   ({group_rate, R} = Link, Acc) when is_atom(R) ->
 			{Link, Acc}
 		   %% ({counter, R} = Link, Acc) when is_atom(R) ->
@@ -362,24 +365,28 @@ init_rate_regulator(Opts, #rr{rate = R} = RR) ->
                        modifiers = Modifiers}}.
 
 
-init_counter(Opts) ->
-    init_counter(Opts, #cr{}).
+%% init_counter(Opts) ->
+%%     init_counter(Opts, #cr{}).
 
 init_counter(Opts, #cr{} = CR0) ->
     R = #rate{},
     Limit = get_value(limit, Opts, R#rate.limit),
     Interval = get_value(interval, Opts, ?COUNTER_SAMPLE_INTERVAL),
+    Increment = get_value(increment, Opts, 1),
     Modifiers = get_value(modifiers, Opts, R#rate.modifiers),
     CR0#cr{rate = #rate{limit = Limit,
 			interval = Interval,
 			preset_limit = Limit,
-			modifiers = Modifiers}}.
+			modifiers = Modifiers},
+	   increment = Increment}.
 
 lift_counters(#st{queues = Qs} = S) ->
     lists:foldl(fun do_lift_counters/2, S, Qs).
 
 do_lift_counters(#queue{name = Name, regulators = Rs} = Q,
-		 #st{queues = Queues, counters = Counters} = S) ->
+		 #st{queues = Queues, counters = Counters} = S0) ->
+    Aliases = [A || #counter{} = A <- Rs],
+    S = lift_aliases(Aliases, Name, S0),
     case [R || #cr{} = R <- Rs] of
 	[] ->
 	    S;
@@ -391,6 +398,24 @@ do_lift_counters(#queue{name = Name, regulators = Rs} = Q,
 	    Queues1 = lists:keyreplace(Name, #queue.name, Queues, Q1),
 	    S#st{queues = Queues1, counters = Cs1}
     end.
+
+lift_aliases([], _, S) ->
+    S;
+lift_aliases(Aliases, QName, #st{counters = Cs} = S) ->
+    Cs1 = lists:foldl(
+	    fun(#counter{name = N}, Csx) ->
+		    case lists:keyfind(N, #cr.name, Csx) of
+			false ->
+			    %% aliased counter doesn't exist...
+			    %% We should probably issue a warning.
+			    Csx;
+			#cr{} = Existing ->
+			    Qs = [QName|Existing#cr.queues -- [QName]],
+			    lists:keyreplace(N, #cr.name, Csx,
+					     Existing#cr{queues = Qs})
+		    end
+	    end, Cs, Aliases),
+    S#st{counters = Cs1}.
 
 mk_counter_alias(#cr{name = Name,
 		     increment = I} = CR, {Rs, Cs}, QName) ->
@@ -404,6 +429,18 @@ mk_counter_alias(#cr{name = Name,
 	    {Rs1, lists:keyreplace(Name, #cr.name, Cs,
 				   Existing#cr{queues = Qs})}
     end.
+
+pickup_aliases(Queues, #cr{name = N} = CR) ->
+    QNames = lists:foldl(
+	       fun(#queue{name = QName, regulators = Rs}, Acc) ->
+		       case [C || #counter{name = Nx} = C <- Rs, Nx == N] of
+			   [] ->
+			       Acc;
+			   [_|_] ->
+			       [QName | Acc]
+		       end
+	       end, [], Queues),
+    CR#cr{queues = QNames}.
 
 lists_replace(X, [X | T], With) -> [With | T];
 lists_replace(X, [A | T], With) -> [A | lists_replace(X, T, With)].
@@ -443,12 +480,10 @@ handle_call(Req, From, S) ->
 i_handle_call({ask, Type, TS}, From, #st{queues = Qs} = S) ->
     {Qname, S1} = select_queue(Type, TS, S),
     case get_queue(Qname, Qs) of
-        #action{type = Type} ->
-            case Type of
-                approve -> approve(From, []);
-                reject  -> reject(From)
-            end,
-            {noreply, S1};
+        #queue{type = approve} -> approve(From, []), {noreply, S1};
+	#queue{type = reject}  -> reject(From)     , {noreply, S1};
+	#queue{type = {producer, _}} ->
+	    {reply, badarg, S1};
         #queue{} = Q ->
             {noreply, queue_job(TS, From, Q, S1)};
         false ->
@@ -472,8 +507,6 @@ i_handle_call({delete_queue, Name}, _, #st{queues = Qs} = S) ->
     case get_queue(Name, Qs) of
         false ->
             {reply, false, S};
-        #action{} = A ->
-            {reply, true, S#st{queues = Qs -- [A]}};
         #queue{} = Q ->
             %% for now, let's be very brutal
             [reject(Client) || {_, Client} <- q_all(Q)],
@@ -526,7 +559,8 @@ i_handle_call({add_counter, Name, Opts}=Req, _, #st{counters = Cs} = S) ->
         false ->
             try CR = init_counter([{name,Name}|Opts], #cr{name = Name,
                                                           shared = true}),
-                {reply, ok, S#st{counters = Cs ++ [CR]}}
+		 CR1 = pickup_aliases(S#st.queues, CR),
+		 {reply, ok, S#st{counters = Cs ++ [CR1]}}
             catch
                 error:Reason ->
                     error_logger:error_report([{error, Reason},
@@ -725,12 +759,10 @@ check_queue(#queue{regulators = Regs0} = Q, TS, S) ->
             {0, [], []};
         false ->
             %% non-empty queue
-            Regs = expand_regulators(Regs0, S),
-            {N, Counters} = check_regulators(Regs, TS, Q),
-            {N, Counters, Regs}
+	    Regs = expand_regulators(Regs0, S),
+	    {N, Counters} = check_regulators(Regs, TS, Q),
+	    {N, Counters, Regs}
     end.
-
-
 
 expand_regulators([{group_rate, R}|Regs], #st{group_rates = GRs} = S) ->
     case get_group(R, GRs) of
@@ -760,10 +792,10 @@ get_counters(QName, #st{queues = Qs} = S) ->
 		{#cr{name = C, increment = Ig}, Il} <- CRs]
     end.
 
-include_regulator(false, _, Regs, S) ->
-    expand_regulators(Regs, S);
-include_regulator(R, Local, Regs, S) ->
-    [{R, Local}|expand_regulators(Regs, S)].
+%% include_regulator(false, _, Regs, S) ->
+%%     expand_regulators(Regs, S);
+%% include_regulator(R, Local, Regs, S) ->
+%%     [{R, Local}|expand_regulators(Regs, S)].
 
 
 update_regulators(Regs, Q0, S0) ->
@@ -915,10 +947,6 @@ start_timer(#queue{name = Name} = Q) ->
         undefined ->
             Q
     end.
-
-next_time(TS, TSl, I) ->
-    Since = (TS - TSl) div 1000,
-    erlang:max(0, I - Since).
 
 do_send_after(T, Msg) ->
     erlang:send_after(T, self(), Msg).

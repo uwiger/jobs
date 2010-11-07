@@ -69,6 +69,7 @@
          increment = 1,
 	 value = 0,
 	 rate = #rate{},
+	 owner,
 	 queues = [],
          % limit        = 5,
          % interval     = 50,
@@ -104,9 +105,6 @@
 		timer,
 		st
 	       }).
-
--record(action, {name      :: atom(),
-                 type      :: approve | reject}).
 
 -record(sampler, {name,
                   mod,
