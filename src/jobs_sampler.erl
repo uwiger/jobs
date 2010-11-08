@@ -27,6 +27,8 @@
 -export([start_link/0, start_link/1,
 	 trigger_sample/0,
 	 tell_sampler/2,
+	 subscribe/0,
+	 end_subscription/0,
 	 calc/3]).
 
 -export([init/1,
@@ -52,6 +54,7 @@
 		%% indicators = [],
 		%% remote_indicators = [],
                 samplers = []               :: [#sampler{}],
+		subscribers = [],
                 modifiers = orddict:new(),
 		remote_modifiers = []}).
 
@@ -77,6 +80,30 @@ start_link(Opts) ->
 tell_sampler(P, Msg) ->
     gen_server:call(?MODULE, {tell_sampler, P, timestamp(), Msg}).
 
+%% @spec subscribe() -> ok
+%% @doc Subscribes to feedback indicator information
+%% 
+%% This function allows a process to receive the same information as the 
+%% jobs_server any time the information changes.
+%%
+%% The notifications are delivered on the format `{jobs_indicators, Info}',
+%% where 
+%% <pre>
+%% Info :: [{IndicatorName, LocalValue, Remote}]
+%%  Remote :: [{NodeName, Value}]
+%% </pre>
+%%
+%% This information could be used e.g. to aggregate the information and generate
+%% new sampler information (which could be passed to a sampler plugin using 
+%% {@link tell_sampler/2}, or to a specific queue using {@link jobs:ask_queue/2}.
+%%
+subscribe() ->
+    gen_server:call(?MODULE, subscribe).
+
+%% 
+end_subscription() ->
+    gen_server:call(?MODULE, end_subscription).
+
 %% ==========================================================
 %% Gen_server callbacks
 
@@ -95,6 +122,23 @@ handle_call({tell_sampler, Name, TS, Msg}, _From, #state{samplers = Samplers0} =
 	    Sampler1 = one_handle_info(Msg, TS, Sampler),
 	    Samplers1 = lists:keyreplace(Name, #sampler.name, Samplers0, Sampler1),
 	    {reply, ok, St#state{samplers = Samplers1}}
+    end;
+handle_call(subscribe, {Pid,_}, #state{subscribers = Subs} = St) ->
+    MRef = erlang:monitor(process, Pid),
+    case lists:keymember(Pid,1,Subs) of
+	true ->
+	    {reply, ok, St};
+	false ->
+	    Subs1 = [{Pid, MRef} | Subs],
+	    {reply, ok, St#state{subscribers = Subs1}}
+    end;
+handle_call(end_subscription, {Pid,_}, #state{subscribers = Subs} = St) ->
+    case lists:keyfind(Pid, 1, Subs) of
+	false ->
+	    {reply, ok, St};
+	{_, MRef} = Found ->
+	    erlang:demonitor(MRef),
+	    {reply, ok, St#state{subscribers = Subs -- [Found]}}
     end.
 		
 
@@ -105,6 +149,8 @@ handle_info({?MODULE, update}, #state{modified = IsModified} = S) ->
 	false ->
 	    {noreply, S}
     end;
+handle_info({'DOWN', MRef, _, _, _}, #state{subscribers = Subs} = St) ->
+    {noreply, St#state{subscribers = lists:keydelete(MRef,2,Subs)}};
 handle_info(Msg, #state{samplers = Samplers0} = S) ->
     Samplers = map_handle_info(Msg, Samplers0),
     {noreply, calc_modifiers(S#state{samplers = Samplers})}.
@@ -222,9 +268,11 @@ sampler_error(Err, Sampler) ->
     Sampler.
 
 
-set_modifiers(#state{modifiers = Local, remote_modifiers = Remote} = S) ->
+set_modifiers(#state{modifiers = Local, remote_modifiers = Remote,
+		     subscribers = Subs} = S) ->
     Grouped = group_modifiers(Local, Remote),
     jobs_server:set_modifiers(Grouped),
+    [Pid ! {jobs_indicators, Grouped} || {Pid,_} <- Subs],
     S.
 
 
