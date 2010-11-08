@@ -27,7 +27,11 @@
 
 -export([ask/1,
 	 done/1,
+	 job_info/1,
 	 run/2]).
+
+-export([ask_queue/2]).
+
 
 %% Configuration API
 -export([add_queue/2,
@@ -91,6 +95,16 @@ done(Opaque) ->
 run(Queue, F) when is_function(F, 0) ->
     jobs_server:run(Queue, F).
 
+%% @spec job_info(Opaque) -> undefined | Info
+%% @doc Retrieves job-specific information from the `Opaque' data object.
+%%
+%% The queue could choose to return specific information that is passed to a
+%% granted job request. This could be used e.g. for load-balancing strategies.
+%% @end
+%%
+job_info(Opaque) ->
+    proplists:get_value(info, Opaque).
+
 %% @spec add_queue(Name::any(), Options::[{Key,Value}]) -> ok
 %% @doc Installs a new queue in the load regulator on the current node.
 %% @end
@@ -105,6 +119,19 @@ add_queue(Name, Options) ->
 %%
 delete_queue(Name) ->
     jobs_server:delete_queue(Name).
+
+%% @spec ask_queue(QueueName, Request) -> Reply
+%% @doc Sends a synchronous request to a specific queue.
+%% 
+%% This function is mainly intended to be used for back-end processes that act
+%% as custom extensions to the load regulator itself. It should not be used by
+%% regular clients. Sophisticated queue behaviours could export gen_server-like
+%% logic allowing them to respond to synchronous calls, either for special
+%% inspection, or for influencing the queue state.
+%% @end
+%%
+ask_queue(QueueName, Request) ->
+    jobs_server:ask_queue(QueueName, Request).
 
 %% @spec add_counter(Name, Options) -> ok
 %% @doc Adds a named counter to the load regulator on the current node.

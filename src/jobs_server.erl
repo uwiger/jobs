@@ -32,6 +32,8 @@
 
 -export([set_modifiers/1]).
 
+-export([ask_queue/2]).
+
 %% Config API
 -export([add_queue/2,
          delete_queue/1,
@@ -121,6 +123,21 @@ add_queue(Name, Options) ->
 delete_queue(Name) ->
     call(?SERVER, {delete_queue, Name}).
 
+
+%% @spec ask_queue(QName, Request) -> Reply
+%% @doc Invoke the Q:handle_call/3 function (if it exists).
+%%
+%% Send a request to a specific queue in the JOBS server.
+%% Each queue has its own local state, allowing it to collect special statistics.
+%% This function allows a client to send a request that is handled by a specific
+%% queue instance, either to pull information from the queue, or to influence its
+%% state.
+%% @end
+%%
+-spec ask_queue(queue_name(), any()) -> any().
+ask_queue(QName, Request) ->
+    call(?SERVER, {ask_queue, QName, Request}).
+
 -spec info(info_category()) -> [any()].
 info(Item) ->
     call(?SERVER, {info, Item}).
@@ -169,6 +186,8 @@ call(Server, Req, Timeout) ->
     case gen_server:call(Server, Req, Timeout) of
         badarg ->
             erlang:error(badarg);
+	{badarg, Reason} ->
+	    erlang:error(Reason);
         Res ->
             Res
     end.
@@ -596,10 +615,32 @@ i_handle_call({modify_group_rate, Name, Opts},_, #st{group_rates = Gs} = S) ->
         _ ->
             {reply, badarg, S}
     end;
+i_handle_call({ask_queue, QName, Req}, From, #st{queues = Qs} = S) ->
+    case get_queue(QName, Qs) of
+	false ->
+	    {reply, badarg, S};
+	#queue{mod = M, st = QSt} = Q ->
+	    SetQState =
+		fun(St) ->
+			S#st{queues =
+				 lists:keyreplace(QName, #queue.name, Qs,
+						  Q#queue{st = St})}
+		end,
+	    %% We don't catch errors; this is done at the level above.
+	    %% One possible error is that the queue module doesn't have a 
+	    %% handle_call/3 callback.
+	    case M:handle_call(Req, From, QSt) of
+		{reply, Rep, QSt1} ->
+		    {reply, Rep, SetQState(QSt1)};
+		{noreply, QSt1} ->
+		    {noreply, SetQState(QSt1)}
+	    end
+    end;
 i_handle_call(_Req, _, S) ->
     {reply, badarg, S}.
 
-handle_cast({done, Pid, {Ref,Cs}}, #st{monitors = Mons} = S) ->
+handle_cast({done, Pid, {Ref, Opaque}}, #st{monitors = Mons} = S) ->
+    Cs = proplists:get_value(counters, Opaque, []),
     case ets:lookup(Mons, {Pid,Ref}) of
 	[] ->
 	    %% huh?
@@ -881,14 +922,22 @@ dispatch_N(N, _Counters, #queue{name = QName,
     {Jobs, Q};
 dispatch_N(N, Counters, Q, #st{monitors = Mons}) ->
     {Jobs, _Q1} = Res = q_out(N, Q),
+    Opaque0 = [{counters, Counters}],
     lists:foreach(
-      fun({_, {Pid,_} = Client}) ->
+      fun(Job) ->
+	      {Pid, Client, Opaque} = job_opaque(Job, Opaque0),
 	      Ref = erlang:monitor(process, Pid),
-	      approve(Client, {Ref, Counters}),
+	      approve(Client, {Ref, Opaque}),
 	      ets:insert(Mons, {{Pid,Ref}, Q#queue.name})
       end, Jobs),
     %% [approve(Client, Counters) || {_, Client} <- Jobs],
     Res.
+
+job_opaque({_, {Pid,_} = Client}, Opaque) ->
+    {Pid, Client, Opaque};
+job_opaque({_, {Pid,_} = Client, Info}, Opaque) ->
+    {Pid, Client, [{info, Info} | Opaque]}.
+
 
 update_counters(Jobs, Cs, 
 		#st{counters = Counters} = S) ->
@@ -957,8 +1006,14 @@ apply_modifiers(Modifiers, #queue{regulators = Rs} = Q) ->
 apply_modifiers(Modifiers, Regulator) ->
     with_modifiers(Modifiers, Regulator, fun apply_damper/4).
 
-remove_modifiers(Modifiers, Regulator) ->
-    with_modifiers(Modifiers, Regulator, fun remove_damper/4).
+%% (Don't quite remember right now when this is supposed to be used...)
+%%
+%% remove_modifiers(Modifiers, Regulator) ->
+%%     with_modifiers(Modifiers, Regulator, fun remove_damper/4).
+
+%% remove_damper(Type, _, _, R) ->
+%%     apply_corr(Type, 0, R).
+
 
 with_modifiers(Modifiers, Regulator, F) ->
     Rate = get_rate(Regulator),
@@ -1016,13 +1071,6 @@ max_remotes(L) ->
 		end, 0, L).
 
 			      
-
-
-
-remove_damper(Type, _, _, R) ->
-    apply_corr(Type, 0, R).
-
-
 apply_corr(Type, 0, R) ->
     R#rate{active_modifiers = lists:keydelete(
                                 Type, 1, R#rate.active_modifiers)};
