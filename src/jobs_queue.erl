@@ -22,6 +22,11 @@
 %%
 %% Created : 15 Jan 2010 by Ulf Wiger <ulf.wiger@erlang-solutions.com>
 %%-------------------------------------------------------------------
+%% @doc Default queue behaviour for JOBS (using ordered_set ets).
+%%
+%% This module implements the default queue behaviour for JOBS, and also 
+%% specifies the behaviour itself.
+%% @end
 
 -module(jobs_queue).
 -author('ulf.wiger@erlang-solutions.com').
@@ -38,6 +43,8 @@
          is_empty/1,
          timedout/1, timedout/2]).
 
+-export([behaviour_info/1]).
+
 -include("jobs.hrl").
 -import(jobs_lib, [timestamp/0]).
 
@@ -47,7 +54,30 @@
 -type job()       :: {pid(), reference()}.
 -type entry()     :: {timestamp(), job()}.
 
+behaviour_info(callbacks) ->
+    [{new    , 2},
+     {delete , 1},
+     {in     , 3},
+     {peek   , 1},
+     {out    , 2},
+     {all    , 1},
+     {info   , 2}];
+behaviour_info(_) ->
+    undefined.
 
+
+%% @spec new(Options, #queue{}) -> #queue{}
+%% @doc Instantiate a new queue.
+%%
+%% Options is the list of options provided when defining the queue.
+%% Q is an initial #queue{} record. It can be used directly by including 
+%% `jobs/include/jobs.hrl', or by using exprecs-style record accessors in the
+%% module `jobs_info'.
+%% See <a href="http://github.com/esl/parse_trans">parse_trans</a> for more info
+%% on exprecs. In the `new/2' function, the #queue.st attribute will normally be
+%% used to keep track of the queue data structure.
+%% @end
+%%
 new(Options, Q) ->
     case proplists:get_value(type, Options, fifo) of
         fifo ->
@@ -55,18 +85,29 @@ new(Options, Q) ->
             Q#queue{st = #st{table = Tab}}
     end.
 
-
+%% @spec delete(#queue{}) -> any()
+%% @doc Queue is being deleted; remove any external data structures.
+%%
+%% If the queue behaviour has created an ETS table or similar, this is the place
+%% to get rid of it.
+%% @end
+%%
 delete(#queue{st = #st{table = T}}) ->
     ets:delete(T).
 
 
-%% in(Job, Q) ->
-%%     in(timestamp(), Job, Q).
-
 
 -spec in(timestamp(), job(), #queue{}) -> #queue{}.
+%% @spec in(Timestamp, Job, #queue{}) -> #queue{}
+%% @doc Enqueue a job reference; return the updated queue.
 %%
-%% Enqueue a job reference; return the updated queue
+%% This puts a job into the queue. The callback function is responsible for 
+%% updating the #queue.oldest_job attribute, if needed. The #queue.oldest_job
+%% attribute shall either contain the Timestamp of the oldest job in the queue,
+%% or `undefined' if the queue is empty. It may be noted that, especially in the
+%% fairly trivial case of the `in/3' function, the oldest job would be 
+%% `erlang:min(Timestamp, PreviousOldest)', even if `PreviousOldest == undefined'.
+%% @end
 %%
 in(TS, Job, #queue{st = #st{table = Tab}, oldest_job = OJ} = Q) ->
     OJ1 = erlang:min(TS, OJ),    % Works even if OJ==undefined
@@ -75,6 +116,9 @@ in(TS, Job, #queue{st = #st{table = Tab}, oldest_job = OJ} = Q) ->
 
 
 -spec peek(#queue{}) -> entry().
+%% @spec peek(#queue{}) -> JobEntry | undefined
+%% @doc Looks at the first item in the queue, without removing it.
+%%
 peek(#queue{st = #st{table = T}}) ->
     case ets:first(T) of
 	'$end_of_table' ->
@@ -84,16 +128,20 @@ peek(#queue{st = #st{table = T}}) ->
     end.
 
 -spec out(N :: integer(), #queue{}) -> {[entry()], #queue{}}.
+%% @spec out(N :: integer(), #queue{}) -> {[Entry], #queue{}}
+%% @doc Dequeue a batch of N jobs; return the modified queue.
 %%
-%% Dequeue a batch of N jobs; return the modified queue.
+%% Note that this function may need to update the #queue.oldest_job attribute,
+%% especially if the queue becomes empty.
+%% @end
 %%
 out(N,#queue{st = #st{table = T}}=Q) when N >= 0 ->
     {out1(N, T), set_oldest_job(Q)}.
 
 
 -spec all(#queue{}) -> [entry()].
-%%
-%% Return all the job entries in the queue
+%% @spec all(#queue{}) -> [JobEntry]
+%% @doc Return all the job entries in the queue, not removing them from the queue.
 %%
 all(#queue{st = #st{table = T}}) ->
     ets:select(T, [{{'$1'},[],['$1']}]).
@@ -102,19 +150,23 @@ all(#queue{st = #st{table = T}}) ->
 -type info_item() :: max_time | oldest_job | length.
 
 -spec info(info_item(), #queue{}) -> any().
-%%
-%% Return information about the queue.
+%% @spec info(Item, #queue{}) -> Info
+%%   Item = max_time | oldest_job | length
+%% @doc Return information about the queue.
 %%
 info(max_time  , #queue{max_time = T}   ) -> T;
 info(oldest_job, #queue{oldest_job = OJ}) -> OJ;
 info(length    , #queue{st = #st{table = Tab}}) ->
     ets:info(Tab, size).
     
--spec timedout(#queue{}) -> [entry()].
+-spec timedout(#queue{}) -> [] | {[entry()], #queue{}}.
+%% @spec timedout(#queue{}) -> [] | {[Entry], #queue{}}
+%% @doc Return all entries that have been in the queue longer than MaxTime.
 %%
-%% Return all entries that have been in the queue longer than MaxTime.
+%% NOTE: This is an inspection function; it doesn't remove the job entries.
+%% @end
 %%
-timedout(#queue{max_time = undefined}) -> [];
+timedout(#queue{max_time = undefined} = Q) -> {[], Q};
 timedout(#queue{max_time = TO} = Q) ->
     timedout(TO, Q).
 
