@@ -521,7 +521,7 @@ i_handle_call({set_modifiers, Modifiers}, _, #st{queues     = Qs,
 i_handle_call({add_queue, Name, Options}, _, #st{queues = Qs} = S) ->
     false = get_queue(Name, Qs),
     NewQueues = init_queues([{Name, Options}], S),
-    {reply, ok, S#st{queues = Qs ++ NewQueues}};
+    {reply, ok, lift_counters(S#st{queues = Qs ++ NewQueues})};
 i_handle_call({delete_queue, Name}, _, #st{queues = Qs} = S) ->
     case get_queue(Name, Qs) of
         false ->
