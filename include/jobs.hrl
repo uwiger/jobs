@@ -89,8 +89,7 @@
               % preset_limit = 0   :: float(),
               % interval           :: float()}).
 
--type regulator()      :: #rr{} | #cr{}.
--type regulator_type() :: counter | group_rate.
+-type regulator()      :: #rr{} | #cr{} | regulator_ref().
 -type regulator_ref()  :: #group_rate{} | #counter{}.
 
 -type m_f_args() :: {atom(), atom(), list()}.

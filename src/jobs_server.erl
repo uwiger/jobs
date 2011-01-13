@@ -256,7 +256,7 @@ expand_opts([]) ->
 
 
 
--spec standard_modifiers() -> [q_modifier()].
+-spec standard_modifiers() -> [q_modifier(),...].
 %%
 standard_modifiers() ->
     [{cpu, 10},
@@ -863,7 +863,7 @@ do_check_queue(#queue{regulators = Regs0} = Q, TS, S) ->
 
 -spec expand_regulators([regulator()], #st{}) -> [exp_regulator()].
 %%
-expand_regulators([{group_rate, R}|Regs], #st{group_rates = GRs} = S) ->
+expand_regulators([#group_rate{name = R}|Regs], #st{group_rates = GRs} = S) ->
     case get_group(R, GRs) of
 	false       -> expand_regulators(Regs, S);
 	#grp{} = GR -> [GR|expand_regulators(Regs, S)]
