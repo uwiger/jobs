@@ -28,7 +28,9 @@
 -export([ask/0,
          ask/1,
          run/1, run/2,
-         done/1]).
+         done/1,
+	 enqueue/2,
+	 dequeue/2]).
 
 -export([set_modifiers/1]).
 
@@ -113,6 +115,18 @@ run(Type, Fun) when is_function(Fun, 0) ->
 %%
 done(Opaque) ->
     gen_server:cast(?MODULE, {done, Opaque}).
+
+
+-spec enqueue(job_class(), any()) -> ok.
+%%
+enqueue(Type, Item) ->
+    call(?SERVER, {enqueue, Type, Item, timestamp()}, infinity).
+
+-spec dequeue(job_class(), integer() | infinity) -> [{timestamp(), any()}].
+%%
+dequeue(Type, N) when N==infinity; is_integer(N), N > 0 ->
+    call(?SERVER, {dequeue, Type, N}, infinity).
+
 
 -spec add_queue(queue_name(), [option()]) -> ok.
 %%		       
@@ -270,9 +284,11 @@ init(Opts) ->
                        N
                end,
     Default = get_value(default_queue, Opts, Default0),
-    {ok, set_info(lift_counters(S1#st{queues        = Queues,
-				      default_queue = Default,
-				      monitors = ets:new(monitors,[set])}))}.
+    {ok, set_info(
+	   kick_producers(
+	     lift_counters(S1#st{queues        = Queues,
+				 default_queue = Default,
+				 monitors = ets:new(monitors,[set])})))}.
 
 
 
@@ -293,11 +309,13 @@ init_queue({Name, standard_counter, N}, S) when is_integer(N), N > 0 ->
                            {modifiers, standard_modifiers()}]
                          }]
                        }]}, S);
+init_queue({Name, passive, Opts}, S) ->
+    init_queue({Name, [{type, {passive, fifo}} | Opts]}, S);
 init_queue({Name, Action}, _S) when Action==approve; Action==reject ->
-    #queue{name = Name, type = Action};
+    #queue{name = Name, type = {action, Action}};
 init_queue({Name, producer, F, Opts}, S) ->
     init_queue({Name, [{type, {producer, F}} | Opts]}, S);
-init_queue({Name, Opts}, S) ->
+init_queue({Name, Opts}, S) when is_list(Opts) ->
     [ChkI, Regs] =
         [get_value(K,Opts,D) ||
             {K, D} <- [{check_interval,undefined},
@@ -404,7 +422,7 @@ lift_counters(#st{queues = Qs} = S) ->
 
 do_lift_counters(#queue{name = Name, regulators = Rs} = Q,
 		 #st{queues = Queues, counters = Counters} = S0) ->
-    Aliases = [A || #counter{} = A <- Rs],
+    Aliases = [A || #counter{name = A} <- Rs],
     S = lift_aliases(Aliases, Name, S0),
     case [R || #cr{} = R <- Rs] of
 	[] ->
@@ -422,15 +440,15 @@ lift_aliases([], _, S) ->
     S;
 lift_aliases(Aliases, QName, #st{counters = Cs} = S) ->
     Cs1 = lists:foldl(
-	    fun(#counter{name = N}, Csx) ->
-		    case lists:keyfind(N, #cr.name, Csx) of
+	    fun(Alias, Csx) ->
+		    case lists:keyfind(Alias, #cr.name, Csx) of
 			false ->
 			    %% aliased counter doesn't exist...
 			    %% We should probably issue a warning.
 			    Csx;
 			#cr{} = Existing ->
 			    Qs = [QName|Existing#cr.queues -- [QName]],
-			    lists:keyreplace(N, #cr.name, Csx,
+			    lists:keyreplace(Alias, #cr.name, Csx,
 					     Existing#cr{queues = Qs})
 		    end
 	    end, Cs, Aliases),
@@ -452,7 +470,7 @@ mk_counter_alias(#cr{name = Name,
 pickup_aliases(Queues, #cr{name = N} = CR) ->
     QNames = lists:foldl(
 	       fun(#queue{name = QName, regulators = Rs}, Acc) ->
-		       case [C || #counter{name = Nx} = C <- Rs, Nx == N] of
+		       case [1 || #counter{name = Nx} <- Rs, Nx =:= N] of
 			   [] ->
 			       Acc;
 			   [_|_] ->
@@ -499,14 +517,44 @@ handle_call(Req, From, S) ->
 i_handle_call({ask, Type, TS}, From, #st{queues = Qs} = S) ->
     {Qname, S1} = select_queue(Type, TS, S),
     case get_queue(Qname, Qs) of
-        #queue{type = approve} -> approve(From, []), {noreply, S1};
-	#queue{type = reject}  -> reject(From)     , {noreply, S1};
-	#queue{type = {producer, _}} ->
+        #queue{type = #action{a = approve}} -> approve(From, []), {noreply, S1};
+	#queue{type = #action{a = reject}}  -> reject(From)     , {noreply, S1};
+	#queue{type = #producer{}} ->
 	    {reply, badarg, S1};
         #queue{} = Q ->
             {noreply, queue_job(TS, From, Q, S1)};
         false ->
             {reply, badarg, S1}
+    end;
+i_handle_call({enqueue, Type, Item, TS}, _From, #st{queues = Qs} = S) ->
+    {Qname, S1} = select_queue(Type, TS, S),
+    case get_queue(Qname, Qs) of
+	#queue{type = {passive, _}, waiters = Ws} = Q ->
+	    case Ws of
+		[] ->
+		    {Result, S2} = do_enqueue(TS, Item, Q, S1),
+		    {reply, Result, S2};
+		[From|Ws1] ->
+		    gen_server:reply(From, [{TS, Item}]),
+		    {reply, ok, update_queue(Q#queue{waiters = Ws1}, S)}
+	    end;
+	_ ->
+	    {reply, badarg, S1}
+    end;
+i_handle_call({dequeue, Type, N}, From, #st{queues = Qs} = S) ->
+    {Qname, _S1} = select_queue(Type, undefined, S),
+    case get_queue(Qname, Qs) of
+	#queue{type = #passive{}, waiters = Ws} = Q ->
+	    {Items, Q1} = q_out(N, Q),
+	    case Items of
+		[] ->
+		    {noreply, update_queue(Q1#queue{waiters = Ws ++ [From]}, S)};
+		Jobs ->
+		    {reply, Jobs, update_queue(Q1, S)}
+	    end;
+	_Other ->
+	    io:fwrite("get_queue(~p, ~p) -> ~p~n", [Qname, Qs, _Other]),
+	    {reply, badarg, S}
     end;
 i_handle_call({set_modifiers, Modifiers}, _, #st{queues     = Qs,
 						 group_rates = GRs,
@@ -793,17 +841,23 @@ do_modify_counter_regulator(Name, Opts, #queue{regulators = Regs} = Q) ->
             badarg
     end.
 
-check_queue(#queue{regulators = Regs0} = Q, TS, S) ->
+check_queue(#queue{type = #producer{}} = Q, TS, S) ->
+    do_check_queue(Q, TS, S);
+check_queue(Q, TS, S) ->
     case q_is_empty(Q) of
         true ->
             %% no action necessary
             {0, [], []};
         false ->
             %% non-empty queue
-	    Regs = expand_regulators(Regs0, S),
-	    {N, Counters} = check_regulators(Regs, TS, Q),
-	    {N, Counters, Regs}
+	    do_check_queue(Q, TS, S)
     end.
+
+do_check_queue(#queue{regulators = Regs0} = Q, TS, S) ->
+    Regs = expand_regulators(Regs0, S),
+    {N, Counters} = check_regulators(Regs, TS, Q),
+    {N, Counters, Regs}.
+
 
 expand_regulators([{group_rate, R}|Regs], #st{group_rates = GRs} = S) ->
     case get_group(R, GRs) of
@@ -909,12 +963,12 @@ check_cr(Val, I, Max) ->
 	    0
     end.
 
--spec dispatch_N(integer() | infinity, [any()], #queue{}, #st{}) -> #queue{}.
+-spec dispatch_N(integer() | infinity, [any()], #queue{}, #st{}) -> {list(), #queue{}}.
 %%
 dispatch_N(N, _Counters, #queue{name = QName, 
-				type = {producer, F}} = Q,
+				type = #producer{f = F}} = Q,
 	   #st{monitors = Mons}) ->
-    Jobs = [spawn_monitor(F) || _ <- lists:seq(1,N)],
+    Jobs = [spawn_mon_producer(F) || _ <- lists:seq(1,N)],
     lists:foreach(
       fun({Pid,Ref}) ->
 	      ets:insert(Mons, {{Pid,Ref}, QName})
@@ -932,6 +986,12 @@ dispatch_N(N, Counters, Q, #st{monitors = Mons}) ->
       end, Jobs),
     %% [approve(Client, Counters) || {_, Client} <- Jobs],
     Res.
+
+spawn_mon_producer({M, F, A}) ->
+    spawn_monitor(M, F, A);
+spawn_mon_producer(F) when is_function(F, 0) ->
+    spawn_monitor(F).
+
 
 job_opaque({_, {Pid,_} = Client}, Opaque) ->
     {Pid, Client, Opaque};
@@ -977,13 +1037,29 @@ union(L1, L2) ->
     (L1 -- L2) ++ L2.
 
 revisit_queues(Qs, S) ->	     
-    [self() ! {check_queue, Q} || Q <- Qs],
+    [revisit_queue(Q) || Q <- Qs],
     S.
-      
 
-update_queue(#queue{name = N} = Q, #st{queues = Qs} = S) ->
-    Q1 = start_timer(Q),
+revisit_queue(Qname) ->
+    self() ! {check_queue, Qname}.
+
+      
+update_queue(#queue{name = N, type = T} = Q, #st{queues = Qs} = S) ->
+    Q1 = case T of
+	     {passive, _} -> Q;
+	     _ ->
+		 start_timer(Q)
+	 end,
     S#st{queues = lists:keyreplace(N, #queue.name, Qs, Q1)}.
+
+kick_producers(#st{queues = Qs} = S) ->
+    lists:foreach(
+      fun(#queue{name = Qname, type = #producer{}}) ->
+	      revisit_queue(Qname);
+	 (_Q) ->
+	      ok
+      end, Qs),
+    S.
 
 start_timer(#queue{timer = TRef} = Q) when TRef =/= undefined ->
     Q;
@@ -1115,7 +1191,13 @@ queue_job(TS, From, #queue{max_size = MaxSz} = Q, S) ->
             update_queue(q_in(TS, From, Q), S)
     end.
 
-
+do_enqueue(TS, Item, #queue{max_size = MaxSz} = Q, S) ->
+    CurSz = q_info(length, Q),
+    if CurSz >= MaxSz ->
+	    {{error, full}, S};
+       true ->
+	    {ok, update_queue(q_in(TS, Item, Q), S)}
+    end.
 
 select_queue(Type, _, #st{q_select = undefined, default_queue = Def} = S) ->
     if Type == undefined ->
@@ -1145,14 +1227,25 @@ q_new(Opts) ->
 						 {type, fifo},
                                                  {max_time, undefined},
                                                  {max_size, undefined}]],
-    #queue{} = q_new(Opts, #queue{name = Name,
-				  mod = Mod,
-				  type = Type,
-				  max_time = MaxTime,
-				  max_size = MaxSize}, Mod).
+    Q0 = #queue{name = Name,
+		mod = Mod,
+		type = Type,
+		max_time = MaxTime,
+		max_size = MaxSize},
+    case Type of
+	{producer, F} -> Q0#queue{type = #producer{f    = F}};
+	{action  , A} -> Q0#queue{type = #action  {a    = A}};
+	_ ->
+	    #queue{} = q_new(Opts, Q0, Mod)
+    end.
 
 q_new(Options, Q, Mod) ->
-    Mod:new(Options, Q).
+    Mod:new(queue_options(Options, Q), Q).
+
+queue_options(Opts, #queue{type = #passive{type = T}}) ->
+    [{type, T}|Opts];
+queue_options(Opts, _) ->
+    Opts.
 
 
 
@@ -1160,24 +1253,16 @@ q_all     (#queue{mod = Mod} = Q)     -> Mod:all     (Q).
 q_timedout(#queue{mod = Mod} = Q)     -> Mod:timedout(Q).
 q_delete  (#queue{mod = Mod} = Q)     -> Mod:delete  (Q).
 %%
-q_is_empty(#queue{type = {producer,_}}) -> false;
+q_is_empty(#queue{type = #producer{}}) -> false;
 q_is_empty(#queue{mod = Mod} = Q)       -> Mod:is_empty(Q).
 %%
 q_out     (infinity, #queue{mod = Mod} = Q)  -> Mod:all (Q);
-q_out     (N , #queue{type = {producer, F}}) -> q_prod_out(N,F);
 q_out     (N , #queue{mod = Mod} = Q) -> Mod:out     (N, Q).
 q_info    (I , #queue{mod = Mod} = Q) -> Mod:info    (I, Q).
 %%
 q_in(TS, From, #queue{mod = Mod, oldest_job = OJ} = Q) ->
     OJ1 = erlang:min(TS, OJ),    % Works even if OJ==undefined
     Mod:in(TS, From, Q#queue{oldest_job = OJ1}).
-
-q_prod_out(N, F) when N > 0 ->
-    F(),
-    q_prod_out(N-1, F);
-q_prod_out(0, _) ->
-    [].
-
 
 %% End queue accessor functions.
 %% ===========================================================
@@ -1192,7 +1277,7 @@ next_time(TS, #queue{latest_dispatch = TS1,
 		     check_interval = I0}) ->
     I = case I0 of
 	    _ when is_integer(I0) -> I0;
-	    {M,F, As} ->
+	    {M, F, As} ->
 		M:F(TS, TS1, As)
 	end,
     Since = (TS - TS1) div 1000,

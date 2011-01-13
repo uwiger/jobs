@@ -28,7 +28,9 @@
 -export([ask/1,
 	 done/1,
 	 job_info/1,
-	 run/2]).
+	 run/2,
+	 enqueue/2,
+	 dequeue/2]).
 
 -export([ask_queue/2]).
 
@@ -94,6 +96,13 @@ done(Opaque) ->
 %%
 run(Queue, F) when is_function(F, 0) ->
     jobs_server:run(Queue, F).
+
+
+enqueue(Queue, Item) ->
+    jobs_server:enqueue(Queue, Item).
+
+dequeue(Queue, N) when N =:= infinity; is_integer(N), N > 0 ->
+    jobs_server:dequeue(Queue, N).
 
 %% @spec job_info(Opaque) -> undefined | Info
 %% @doc Retrieves job-specific information from the `Opaque' data object.

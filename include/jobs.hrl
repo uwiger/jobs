@@ -52,6 +52,7 @@
 	       active_modifiers = []}).
 
 -record(counter, {name, increment = undefined}).
+-record(group_rate, {name}).
 
 -record(rr,
         %% Rate-based regulation
@@ -89,20 +90,24 @@
 
 -type regulator()      :: #rr{} | #cr{}.
 -type regulator_type() :: counter | group_rate.
--type regulator_ref()  :: {regulator_type(), atom()}.
+-type regulator_ref()  :: #group_rate{} | #counter{}.
+
+-record(producer, {f = {erlang,error,[undefined_producer]} :: mfa() | function()}).
+-record(passive , {type = fifo   :: fifo}).
+-record(action  , {a = approve   :: approve | reject}).
 
 -record(queue, {name                 :: any(),
 		mod                  :: atom(),
-		type = fifo          :: fifo | {producer,
-						{atom(),atom(),list()}},
+		type = fifo          :: fifo | #producer{} | #passive{} | #action{},
 		group                :: atom(),
 		regulators  = []     :: [regulator() | regulator_ref()],
 		max_time             :: undefined | integer(),
 		max_size             :: undefined | integer(),
 		latest_dispatch = 0  :: integer(),
-		check_interval       :: integer(),
+		check_interval       :: integer() | mfa(),
 		oldest_job           :: undefined | integer(),
 		timer,
+		waiters = []         :: [{pid(), reference()}],
 		st
 	       }).
 
@@ -129,5 +134,5 @@
 %% This value, in microseconds, defines the highest frequency with which 
 %% it can issue error reports. Any reports that would cause this limit to 
 %% be exceeded are simply discarded.
-%%
+%
 -define(MAX_ERROR_RPT_INTERVAL_US, 1000000).
