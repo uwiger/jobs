@@ -859,6 +859,10 @@ do_check_queue(#queue{regulators = Regs0} = Q, TS, S) ->
     {N, Counters, Regs}.
 
 
+-type exp_regulator() :: {#cr{}, integer() | undefined} | #rr{} | #grp{}.
+
+-spec expand_regulators([regulator()], #st{}) -> [exp_regulator()].
+%%
 expand_regulators([{group_rate, R}|Regs], #st{group_rates = GRs} = S) ->
     case get_group(R, GRs) of
 	false       -> expand_regulators(Regs, S);
@@ -915,7 +919,7 @@ update_regulators(Regs, Q0, S0) ->
       end, {Q0, S0}, Regs).
 
 
--spec check_regulators([regulator()], timestamp(), #queue{}) ->
+-spec check_regulators([exp_regulator()], timestamp(), #queue{}) ->
 			      {integer(), [any()]}.
 %%
 check_regulators(Regs, TS, #queue{latest_dispatch = TL}) ->

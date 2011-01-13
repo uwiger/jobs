@@ -28,6 +28,7 @@
 -opaque reg_obj() :: [counter()].
 
 -type option()     :: {queues, [q_spec()]}
+		    | {config, file:name()}
                     | {group_rates, [{q_name(), [option()]}]}
 		    | {counters,    [{q_name(), [option()]}]}
 		    | {interval, integer()}.

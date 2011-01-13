@@ -105,7 +105,7 @@ info(oldest_job, #queue{oldest_job = OJ}) -> OJ;
 info(length    , #queue{st = L}) ->
     length(L).
     
--spec timedout(#queue{}) -> [entry()].
+-spec timedout(#queue{}) -> {[entry()], #queue{}}.
 %%
 %% Return all entries that have been in the queue longer than MaxTime.
 %%
