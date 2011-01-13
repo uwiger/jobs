@@ -76,4 +76,4 @@ take_last(_, [], Last) ->
 
 %% Millisecond timestamp, never wraps
 timestamp() ->
-    job_server:timestamp() div 1000.
+    jobs_server:timestamp() div 1000.

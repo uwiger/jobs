@@ -1253,7 +1253,7 @@ q_all     (#queue{mod = Mod} = Q)     -> Mod:all     (Q).
 q_timedout(#queue{mod = Mod} = Q)     -> Mod:timedout(Q).
 q_delete  (#queue{mod = Mod} = Q)     -> Mod:delete  (Q).
 %%
-q_is_empty(#queue{type = #producer{}}) -> false;
+%q_is_empty(#queue{type = #producer{}}) -> false;
 q_is_empty(#queue{mod = Mod} = Q)       -> Mod:is_empty(Q).
 %%
 q_out     (infinity, #queue{mod = Mod} = Q)  -> Mod:all (Q);

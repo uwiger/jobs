@@ -92,7 +92,9 @@
 -type regulator_type() :: counter | group_rate.
 -type regulator_ref()  :: #group_rate{} | #counter{}.
 
--record(producer, {f = {erlang,error,[undefined_producer]} :: mfa() | function()}).
+-type m_f_args() :: {atom(), atom(), list()}.
+
+-record(producer, {f={erlang,error,[undefined_producer]} :: m_f_args() | function()}).
 -record(passive , {type = fifo   :: fifo}).
 -record(action  , {a = approve   :: approve | reject}).
 
