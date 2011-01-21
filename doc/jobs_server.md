@@ -20,7 +20,7 @@ __Authors:__ : Ulf Wiger ([`ulf.wiger@erlang-solutions.com`](mailto:ulf.wiger@er
 
 
 
-<table width="100%" border="1" cellspacing="0" cellpadding="2" summary="function index"><tr><td valign="top"><a href="#add_counter-2">add_counter/2</a></td><td></td></tr><tr><td valign="top"><a href="#add_group_rate-2">add_group_rate/2</a></td><td></td></tr><tr><td valign="top"><a href="#add_queue-2">add_queue/2</a></td><td></td></tr><tr><td valign="top"><a href="#ask-0">ask/0</a></td><td></td></tr><tr><td valign="top"><a href="#ask-1">ask/1</a></td><td></td></tr><tr><td valign="top"><a href="#ask_queue-2">ask_queue/2</a></td><td>Invoke the Q:handle_call/3 function (if it exists).</td></tr><tr><td valign="top"><a href="#code_change-3">code_change/3</a></td><td></td></tr><tr><td valign="top"><a href="#delete_counter-1">delete_counter/1</a></td><td></td></tr><tr><td valign="top"><a href="#delete_group_rate-1">delete_group_rate/1</a></td><td></td></tr><tr><td valign="top"><a href="#delete_queue-1">delete_queue/1</a></td><td></td></tr><tr><td valign="top"><a href="#done-1">done/1</a></td><td></td></tr><tr><td valign="top"><a href="#handle_call-3">handle_call/3</a></td><td></td></tr><tr><td valign="top"><a href="#handle_cast-2">handle_cast/2</a></td><td></td></tr><tr><td valign="top"><a href="#handle_info-2">handle_info/2</a></td><td></td></tr><tr><td valign="top"><a href="#info-1">info/1</a></td><td></td></tr><tr><td valign="top"><a href="#init-1">init/1</a></td><td></td></tr><tr><td valign="top"><a href="#modify_counter-2">modify_counter/2</a></td><td></td></tr><tr><td valign="top"><a href="#modify_group_rate-2">modify_group_rate/2</a></td><td></td></tr><tr><td valign="top"><a href="#modify_regulator-4">modify_regulator/4</a></td><td></td></tr><tr><td valign="top"><a href="#queue_info-1">queue_info/1</a></td><td></td></tr><tr><td valign="top"><a href="#queue_info-2">queue_info/2</a></td><td></td></tr><tr><td valign="top"><a href="#run-1">run/1</a></td><td></td></tr><tr><td valign="top"><a href="#run-2">run/2</a></td><td></td></tr><tr><td valign="top"><a href="#set_modifiers-1">set_modifiers/1</a></td><td></td></tr><tr><td valign="top"><a href="#start_link-0">start_link/0</a></td><td></td></tr><tr><td valign="top"><a href="#start_link-1">start_link/1</a></td><td></td></tr><tr><td valign="top"><a href="#terminate-2">terminate/2</a></td><td></td></tr><tr><td valign="top"><a href="#timestamp-0">timestamp/0</a></td><td></td></tr><tr><td valign="top"><a href="#timestamp_to_datetime-1">timestamp_to_datetime/1</a></td><td></td></tr></table>
+<table width="100%" border="1" cellspacing="0" cellpadding="2" summary="function index"><tr><td valign="top"><a href="#add_counter-2">add_counter/2</a></td><td></td></tr><tr><td valign="top"><a href="#add_group_rate-2">add_group_rate/2</a></td><td></td></tr><tr><td valign="top"><a href="#add_queue-2">add_queue/2</a></td><td></td></tr><tr><td valign="top"><a href="#ask-0">ask/0</a></td><td></td></tr><tr><td valign="top"><a href="#ask-1">ask/1</a></td><td></td></tr><tr><td valign="top"><a href="#ask_queue-2">ask_queue/2</a></td><td>Invoke the Q:handle_call/3 function (if it exists).</td></tr><tr><td valign="top"><a href="#code_change-3">code_change/3</a></td><td></td></tr><tr><td valign="top"><a href="#delete_counter-1">delete_counter/1</a></td><td></td></tr><tr><td valign="top"><a href="#delete_group_rate-1">delete_group_rate/1</a></td><td></td></tr><tr><td valign="top"><a href="#delete_queue-1">delete_queue/1</a></td><td></td></tr><tr><td valign="top"><a href="#dequeue-2">dequeue/2</a></td><td></td></tr><tr><td valign="top"><a href="#done-1">done/1</a></td><td></td></tr><tr><td valign="top"><a href="#enqueue-2">enqueue/2</a></td><td></td></tr><tr><td valign="top"><a href="#handle_call-3">handle_call/3</a></td><td></td></tr><tr><td valign="top"><a href="#handle_cast-2">handle_cast/2</a></td><td></td></tr><tr><td valign="top"><a href="#handle_info-2">handle_info/2</a></td><td></td></tr><tr><td valign="top"><a href="#info-1">info/1</a></td><td></td></tr><tr><td valign="top"><a href="#init-1">init/1</a></td><td></td></tr><tr><td valign="top"><a href="#modify_counter-2">modify_counter/2</a></td><td></td></tr><tr><td valign="top"><a href="#modify_group_rate-2">modify_group_rate/2</a></td><td></td></tr><tr><td valign="top"><a href="#modify_regulator-4">modify_regulator/4</a></td><td></td></tr><tr><td valign="top"><a href="#queue_info-1">queue_info/1</a></td><td></td></tr><tr><td valign="top"><a href="#queue_info-2">queue_info/2</a></td><td></td></tr><tr><td valign="top"><a href="#run-1">run/1</a></td><td></td></tr><tr><td valign="top"><a href="#run-2">run/2</a></td><td></td></tr><tr><td valign="top"><a href="#set_modifiers-1">set_modifiers/1</a></td><td></td></tr><tr><td valign="top"><a href="#start_link-0">start_link/0</a></td><td></td></tr><tr><td valign="top"><a href="#start_link-1">start_link/1</a></td><td></td></tr><tr><td valign="top"><a href="#terminate-2">terminate/2</a></td><td></td></tr><tr><td valign="top"><a href="#timestamp-0">timestamp/0</a></td><td></td></tr><tr><td valign="top"><a href="#timestamp_to_datetime-1">timestamp_to_datetime/1</a></td><td></td></tr></table>
 
 
 <a name="functions"></a>
@@ -159,6 +159,18 @@ state.
 `delete_queue(Name) -> any()`
 
 
+<a name="dequeue-2"></a>
+
+
+<h3>dequeue/2</h3>
+
+
+
+
+
+`dequeue(Type, N) -> any()`
+
+
 <a name="done-1"></a>
 
 
@@ -169,6 +181,18 @@ state.
 
 
 `done(Opaque) -> any()`
+
+
+<a name="enqueue-2"></a>
+
+
+<h3>enqueue/2</h3>
+
+
+
+
+
+`enqueue(Type, Item) -> any()`
 
 
 <a name="handle_call-3"></a>
@@ -388,4 +412,4 @@ state.
 
 
 
-_Generated by EDoc, Nov 10 2010, 08:58:44._
+_Generated by EDoc, Jan 22 2011, 00:39:21._

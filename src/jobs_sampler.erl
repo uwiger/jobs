@@ -50,7 +50,8 @@
 
 
 -record(state, {modified = false,
-		update_delay = 500,
+		update_delay = 0,
+		sample_interval = ?SAMPLE_INTERVAL,
 		%% indicators = [],
 		%% remote_indicators = [],
                 samplers = []               :: [#sampler{}],
@@ -109,9 +110,16 @@ end_subscription() ->
 
 init(Opts) ->
     Samplers = init_samplers(Opts),
-    timer:apply_interval(?SAMPLE_INTERVAL, ?MODULE, trigger_sample, []),
+    S0 = #state{samplers = Samplers},
+    UpdateDelay = proplists:get_value(
+		    sample_update_delay, Opts, S0#state.update_delay),
+    SampleInterval = proplists:get_value(
+		       sample_interval, Opts, S0#state.sample_interval),
+    timer:apply_interval(SampleInterval, ?MODULE, trigger_sample, []),
     gen_server:abcast(nodes(), ?MODULE, {get_status, node()}),
-    {ok, #state{samplers = Samplers}}.
+    {ok, #state{samplers = Samplers,
+		update_delay = UpdateDelay,
+		sample_interval = SampleInterval}}.
 
 
 handle_call({tell_sampler, Name, TS, Msg}, _From, #state{samplers = Samplers0} = St) ->
@@ -145,7 +153,8 @@ handle_call(end_subscription, {Pid,_}, #state{subscribers = Subs} = St) ->
 handle_info({?MODULE, update}, #state{modified = IsModified} = S) ->
     case IsModified of
 	true ->
-	    {noreply, set_modifiers(S#state{modified = false})};
+	    {noreply, report_global(
+			report_local(S#state{modified = false}))};
 	false ->
 	    {noreply, S}
     end;
@@ -166,7 +175,7 @@ handle_cast({remote, Node, Modifiers}, #state{remote_modifiers = Ds} = S) ->
     NewDs =
 	lists:keysort(1, ([{{K,Node},V} || {K,V} <- Modifiers]
 			  ++ [D || {{_,N},_} = D <- Ds, N =/= Node])),
-    {noreply, calc_modifiers(S#state{remote_modifiers = NewDs})}.
+    {noreply, report_local(S#state{remote_modifiers = NewDs})}.
 
 
 terminate(_, _S) ->
@@ -268,12 +277,17 @@ sampler_error(Err, Sampler) ->
     Sampler.
 
 
-set_modifiers(#state{modifiers = Local, remote_modifiers = Remote,
+report_local(#state{modifiers = Local, remote_modifiers = Remote,
 		     subscribers = Subs} = S) ->
     Grouped = group_modifiers(Local, Remote),
     jobs_server:set_modifiers(Grouped),
     [Pid ! {jobs_indicators, Grouped} || {Pid,_} <- Subs],
     S.
+
+report_global(#state{modifiers = Local} = S) ->
+    gen_server:abcast(nodes(), ?MODULE, {remote, node(), Local}),
+    S.
+
 
 
 calc_modifiers(#state{samplers = Samplers} = S) ->
@@ -313,52 +327,8 @@ merge_modifiers(New, Modifiers) ->
       fun(_, V1, V2) -> erlang:max(V1, V2) end, New, Modifiers).
 
 
-
-%% notify_others(States) ->
-%%     [case X of
-%%         {X1,X1} -> ignore;
-%%         {X2,_} ->
-%%              [{?MODULE,N} ! {remote, Msg, node(), X2} || N <- nodes()]
-%%      end || {Msg, X} <- States].
-
-
-% calc_modifiers(New, #state{modifiers = Ds0} = S) ->
-%     S1 = update_state(New, S),
-%     Ds1 = calc_modifiers(S1),
-%     if Ds1 == Ds0 ->
-%             S1;
-%        true ->
-%             notify_others(Ds1),
-%             io:fwrite("applying modifiers ~p~n", [Ds1]),
-%             jobs_server:set_modifiers(Ds1),
-%             S1#state{modifiers = Ds1}
-%     end.
-
-
-% update_state(New, S) ->
-%     Is = '#set-indicators'(New, S#state.indicators),
-%     S#state{indicators = Is}.
-              
-    
-% calc_modifiers(#state{indicators = Is}) ->
-%     MnesiaInds = [mnesia_dumper,
-%                   mnesia_tm,
-%                   mnesia_remote],
-%     [MD, MT, R] = '#get-indicators'(MnesiaInds, Is),
-%     ordsets:from_list([{mnesia, MD + MT + value(R)} |
-%                        '#get-indicators'(
-%                          '#info-indicators'(fields) -- MnesiaInds, Is)]).
-
 tell_node(Node, S) ->
-    gen_server:cast({?MODULE, Node}, {remote, node(), calc_modifiers(S)}).
-
-
-%% value(false) -> 0;
-%% value(true ) -> 1;
-%% value([]   ) -> 0;
-%% value([_|_]) -> 1.
-
-
+    gen_server:cast({?MODULE, Node}, {remote, node(), S#state.modifiers}).
 
 
 %% example: type = time , step = {seconds, [{0,1},{30,2},{45,3},{50,4}]}

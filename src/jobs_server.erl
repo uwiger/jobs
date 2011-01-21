@@ -446,8 +446,8 @@ lift_aliases(Aliases, QName, #st{counters = Cs} = S) ->
 			    %% aliased counter doesn't exist...
 			    %% We should probably issue a warning.
 			    Csx;
-			#cr{} = Existing ->
-			    Qs = [QName|Existing#cr.queues -- [QName]],
+			#cr{queues = Queues} = Existing ->
+			    Qs = [QName|Queues -- [QName]],
 			    lists:keyreplace(Alias, #cr.name, Csx,
 					     Existing#cr{queues = Qs})
 		    end
@@ -461,8 +461,8 @@ mk_counter_alias(#cr{name = Name,
     case lists:keyfind(Name, #cr.name, Cs) of
 	false ->
 	    {Rs1, [CR#cr{queues = [QName]}|Cs]};
-	#cr{} = Existing ->
-	    Qs = [QName|Existing#cr.queues -- [QName]],
+	#cr{queues = Queues} = Existing ->
+	    Qs = [QName|Queues -- [QName]],
 	    {Rs1, lists:keyreplace(Name, #cr.name, Cs,
 				   Existing#cr{queues = Qs})}
     end.
@@ -509,8 +509,10 @@ handle_call(Req, From, S) ->
             {reply, R, set_info(S1)}
     catch
         error:Reason ->
+	    io:fwrite("caught Reason = ~p~n", [{Reason, erlang:get_stacktrace()}]),
             error_report([{error, Reason},
-                          {request, Req}]),
+                          {request, Req},
+			  {stacktrace, erlang:get_stacktrace()}]),
             {reply, badarg, S}
     end.
 
@@ -559,7 +561,6 @@ i_handle_call({dequeue, Type, N}, From, #st{queues = Qs} = S) ->
 i_handle_call({set_modifiers, Modifiers}, _, #st{queues     = Qs,
 						 group_rates = GRs,
 						 counters    = Cs} = S) ->
-    %% io:fwrite("~p: set_modifiers (~p)~n", [?MODULE, Modifiers]),
     GRs1 = [apply_modifiers(Modifiers, G) || G <- GRs],
     Cs1  = [apply_modifiers(Modifiers, C) || C <- Cs],
     Qs1  = [apply_modifiers(Modifiers, Q) || Q <- Qs],
