@@ -64,7 +64,10 @@ start_slave(Name) ->
 	_ ->
 	    ok
     end,
-    {ok, Node} = slave:start(host(), Name),
+    Path = code:lib_dir(jobs) ++ "/ebin",
+    Path1 = filename:dirname(code:which(jobs)),
+    {ok, Node} = slave:start(host(), Name, "-pa " ++ Path1 ++
+			    " -pz " ++ Path),
     io:fwrite(user, "Slave node: ~p~n", [Node]),
     Node.
 
