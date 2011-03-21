@@ -21,8 +21,9 @@ dist_test_() ->
     {foreach,
      fun() ->
 	     Remote = start_slave(Name),
-	     rpc:call(Remote, ?MODULE, with_msg_sampler, [Rate]),
-	     with_msg_sampler(Rate),
+	     ?assertEqual(Rate,
+			  rpc:call(Remote, ?MODULE, with_msg_sampler, [Rate])),
+	     ?assertEqual(Rate, with_msg_sampler(Rate)),
 	     {Remote, Rate}
      end,
      fun({Remote, _}) ->
@@ -38,7 +39,7 @@ dist_test_() ->
 
 with_msg_sampler(Rate) ->
     application:unload(jobs),
-    application:load(jobs),
+    ok = application:load(jobs),
     [application:set_env(jobs, K, V) ||
 	{K,V} <- [{queues, [{q, [{regulators, 
 				  [{rate, [
@@ -52,7 +53,7 @@ with_msg_sampler(Rate) ->
 			     ]}
 		 ]
     ],
-    application:start(jobs),
+    ok = application:start(jobs),
     Rate.
 
 start_slave(Name) ->
