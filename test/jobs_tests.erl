@@ -58,6 +58,7 @@ with_msg_sampler(Rate) ->
 start_slave(Name) ->
     case node() of
 	nonode@nohost ->
+	    os:cmd("epmd -daemon"),
 	    {ok, _} = net_kernel:start([jobs_eunit_master, shortnames]);
 	_ ->
 	    ok
