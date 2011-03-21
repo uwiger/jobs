@@ -20,10 +20,10 @@ dist_test_() ->
     Name = jobs_eunit_slave,
     {foreach,
      fun() ->
+	     ?assertEqual(Rate, with_msg_sampler(Rate)),
 	     Remote = start_slave(Name),
 	     ?assertEqual(Rate,
 			  rpc:call(Remote, ?MODULE, with_msg_sampler, [Rate])),
-	     ?assertEqual(Rate, with_msg_sampler(Rate)),
 	     {Remote, Rate}
      end,
      fun({Remote, _}) ->
