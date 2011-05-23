@@ -37,13 +37,13 @@ spawn_cpu_intensive_jobs() ->
             ok
     after ?DELAY_BETWEEN_TASKS ->
             spawn(fun() -> jobs:run(ramirez, fun cpu_intensive_job/0) end),
-			performance_logger:increment_counter(jobs_enqueued, 1),
+            performance_logger:increment_counter(jobs_enqueued, 1),
             spawn_cpu_intensive_jobs()
     end.
 
 cpu_intensive_job() ->
     %% TODO insert real CPU-intensive task here.
-	%% NOTE that somehow, this seems like enough to crank up the CPU usage.
+    %% NOTE that somehow, this seems like enough to crank up the CPU usage.
     timer:sleep(500),
     performance_logger:increment_counter(jobs_done, 1).
 
@@ -56,16 +56,16 @@ queue_frequency() ->
 %% where 'foobar' can be - as far as I can tell - any atom.
 %% NOTE that you need to set 'samplers', not 'sampler' - setting the latter will result in Jobs not working.
 a_test_scenario() ->
-	performance_logger:set_counter(jobs_enqueued, 0),
-	performance_logger:set_counter(jobs_done, 0),
-	start(),
-	timer:sleep(500),
-	performance_logger:start_recording([{jobs_enqueued, "\"Jobs enqueued\"", diff},
-										{jobs_done, "\"Jobs done\"", diff},
-										{fun queue_frequency/0, "\"Queue frequency\"", identity}]),
-	timer:sleep(12000),
-	stop(),
-	timer:sleep(16000),
-	performance_logger:end_recording(),
-	performance_logger:save_recorded_data_to_file("jobs_cpu.dat"),
-	ok.
+    performance_logger:set_counter(jobs_enqueued, 0),
+    performance_logger:set_counter(jobs_done, 0),
+    start(),
+    timer:sleep(500),
+    performance_logger:start_recording([{jobs_enqueued, "\"Jobs enqueued\"", diff},
+                                        {jobs_done, "\"Jobs done\"", diff},
+                                        {fun queue_frequency/0, "\"Queue frequency\"", identity}]),
+    timer:sleep(12000),
+    stop(),
+    timer:sleep(16000),
+    performance_logger:end_recording(),
+    performance_logger:save_recorded_data_to_file("jobs_cpu.dat"),
+    ok.

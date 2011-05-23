@@ -123,7 +123,7 @@ handle_cast({start_recording, DataSpec}, State) ->
     ets:delete_all_objects(?PFL_ETS_NAME),
     {ok, TRef} = timer:apply_interval(?SAMPLING_TIME, ?MODULE, tick, []),
     {noreply, State#state{start_time = erlang:now(),
-						  %% we add two default counters, that measure CPU load and memory usage.
+                          %% we add two default counters, that measure CPU load and memory usage.
                           data_spec = [{fun cpu_load/0, "CPULoad", identity},
                                        {fun memory_use/0, "MemoryUse", identity} | DataSpec],
                           timer = TRef}};
@@ -164,7 +164,7 @@ setf(Counter, Value) ->
     put(Counter, Value).
 
 getf(Counter) when is_function(Counter) ->
-	Counter();
+    Counter();
 
 %% NOTE that getf will convert 'undefined' atom to 0, so that
 %% we may assume we're working with numerical counters.
@@ -178,9 +178,9 @@ getf(Counter) ->
 
 
 calculate_sample(Counters) ->
-	lists:map(fun({Counter, _Name, _SamplingType}) ->
-					  getf(Counter) end,
-			  Counters).
+    lists:map(fun({Counter, _Name, _SamplingType}) ->
+                      getf(Counter) end,
+              Counters).
 
 compute_time_offset(#state{start_time = StartTime}) ->
     timer:now_diff(erlang:now(), StartTime) * ?TIME_COMPUTATION_SCALE.
@@ -243,7 +243,7 @@ zipwith4(Combine, [H1 | T1], [H2 | T2], [H3 | T3], [H4 | T4], Accu) ->
 
 %% TODO needs real implementation
 spec_to_gnuplot_script(DataSpec) ->
-	io_lib:format("set terminal png transparent nocrop enhanced font arial 8 size 800,600
+    io_lib:format("set terminal png transparent nocrop enhanced font arial 8 size 800,600
 
 set autoscale y
 set autoscale y2
