@@ -9,10 +9,16 @@ rate_test_() ->
       fun(_, _) -> stop_server() end,
       [{{rate,1}, fun(_,_) -> [fun() -> serial(1,2,2) end] end}
        , {{rate,   5}, fun(_,_) -> [fun() -> serial(5,5,1) end] end}
+       , {{rate,   50}, fun(_,_) -> [fun() -> serial(50,50,1) end] end}
+       , {{rate,   100}, fun(_,_) -> [fun() -> serial(100,100,1) end] end}
+       , {{rate,   300}, fun(_,_) -> [fun() -> serial(300,300,1) end] end}
+       , {{rate,   500}, fun(_,_) -> [fun() -> serial(500,500,1) end] end}
+       , {{rate,   1000}, fun(_,_) -> [fun() -> serial(1000,1000,1) end] end}
        %% , {{rate, 100}, fun(O,_) -> [fun() -> rate_test(O,1) end] end}
        , {{rate, 400}, fun(_,_) -> [fun() -> par_run(400,400,1) end] end}
        , {{rate, 600}, fun(_,_) -> [fun() -> par_run(600,600,1) end] end}
        , {{rate,1000}, fun(_,_) -> [fun() -> par_run(1000,1000,1) end] end}
+       , {{rate,2000}, fun(_,_) -> [fun() -> par_run(2000,2000,1) end] end}
        %% , {[{rate,100},
        %% 	   {group,50}], fun(O,_) -> [fun() -> max_rate_test(O,1) end] end}
        , {{count,3}, fun(_,_) -> [fun() -> counter_run(30,1) end] end}

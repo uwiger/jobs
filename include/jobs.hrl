@@ -18,7 +18,7 @@
 %% File    : jobs.hrl
 %% @author  : Ulf Wiger <ulf.wiger@erlang-solutions.com>
 %% @end
-%% Description : 
+%% Description :
 %%
 %% Created : 15 Jan 2010 by Ulf Wiger <ulf.wiger@erlang-solutions.com>
 %%-------------------------------------------------------------------
@@ -94,13 +94,15 @@
 
 -type m_f_args() :: {atom(), atom(), list()}.
 
--record(producer, {f={erlang,error,[undefined_producer]} :: m_f_args() | function()}).
+-record(producer, {f={erlang,error,[undefined_producer]}
+		   :: m_f_args() | function()}).
 -record(passive , {type = fifo   :: fifo}).
 -record(action  , {a = approve   :: approve | reject}).
 
 -record(queue, {name                 :: any(),
 		mod                  :: atom(),
-		type = fifo          :: fifo | #producer{} | #passive{} | #action{},
+		type = fifo          :: fifo | #producer{} | #passive{}
+				      | #action{},
 		group                :: atom(),
 		regulators  = []     :: [regulator() | regulator_ref()],
 		max_time             :: undefined | integer(),
@@ -109,6 +111,7 @@
 		check_interval       :: integer() | mfa(),
 		oldest_job           :: undefined | integer(),
 		timer,
+		check_counter = 0    :: integer(),
 		waiters = []         :: [{pid(), reference()}],
 		st
 	       }).
