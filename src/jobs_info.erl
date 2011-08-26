@@ -39,5 +39,3 @@ pp(X) ->
 		    X
 	    end
     end.
-
-	      

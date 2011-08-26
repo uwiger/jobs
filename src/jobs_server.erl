@@ -115,7 +115,7 @@ run(Type, Fun) when is_function(Fun, 0) ->
 done({undefined,[]}) ->
     ok;
 done(Opaque) ->
-    gen_server:cast(?MODULE, {done, Opaque}).
+    gen_server:cast(?MODULE, {done, self(), Opaque}).
 
 
 -spec enqueue(job_class(), any()) -> ok.
@@ -318,7 +318,7 @@ init_queue({Name, standard_counter, N}, S) when is_integer(N), N > 0 ->
 init_queue({Name, passive, Opts}, S) ->
     init_queue({Name, [{type, {passive, fifo}} | Opts]}, S);
 init_queue({Name, Action}, _S) when Action==approve; Action==reject ->
-    #queue{name = Name, type = {action, Action}};
+   #queue{name = Name, type = {action, Action}};
 init_queue({Name, producer, F, Opts}, S) ->
     init_queue({Name, [{type, {producer, F}} | Opts]}, S);
 init_queue({Name, Opts}, S) when is_list(Opts) ->
@@ -329,14 +329,15 @@ init_queue({Name, Opts}, S) when is_list(Opts) ->
                        {regulators, []},
 		       {lambda, (#avg{})#avg.lambda}]],
     Q0 = q_new([{name,Name}|Opts]),
-    Avg = #avg{lambda = Lambda},
     Q1 = init_regulators(Regs, Q0#queue{check_interval = ChkI,
-					check_counter = CheckCounter,
-					avg_in = Avg,
-					avg_out = Avg
+					check_counter = CheckCounter
 				       }),
+    RateLimit = get_rate_limit(Q1, S),
+    Avg = #avg{lambda = Lambda, rate = RateLimit},
     RateOnly = is_rate_only(Q1#queue.regulators),
-    calculate_check_interval(Q1#queue{rate_only = RateOnly}, S).
+    calculate_check_interval(Q1#queue{rate_only = RateOnly,
+				      avg_in = Avg,
+				      avg_out = Avg#avg{rate = 0}}, S).
 
 is_rate_only(Rs) ->
     case [RR || #rr{} = RR <- Rs] of
@@ -547,10 +548,11 @@ i_handle_call({ask, Type}, From, #st{queues = Qs} = S) ->
 	    {reply, badarg, S1};
         #queue{avg_in = AvgIn} = Q ->
 	    NewAvgIn = calc_input_rate(TS, AvgIn),
+	    PrelRate = prel_rate(NewAvgIn), % include partially filled last slot
 	    Q1 = Q#queue{avg_in = NewAvgIn},
 	    case Q1#queue.rate_only andalso
 		q_is_empty(Q1) andalso
-		can_approve_direct(NewAvgIn#avg.rate, Q1) of
+		can_approve_direct(PrelRate, Q1) of
 		true ->
 		    approve(From, []),
 		    {noreply, update_queue(
@@ -567,7 +569,7 @@ i_handle_call({enqueue, Type, Item}, _From, #st{queues = Qs} = S) ->
     TS = timestamp(),
     {Qname, S1} = select_queue(Type, TS, S),
     case get_queue(Qname, Qs) of
-	#queue{type = {passive, _}, waiters = Ws} = Q ->
+	#queue{type = #passive{}, waiters = Ws} = Q ->
 	    case Ws of
 		[] ->
 		    {Result, S2} = do_enqueue(TS, Item, Q, S1),
@@ -725,6 +727,7 @@ i_handle_call(_Req, _, S) ->
     {reply, badarg, S}.
 
 handle_cast({done, Pid, {Ref, Opaque}}, #st{monitors = Mons} = S) ->
+%%    io:fwrite("done, ~p, ~p~n", [Pid, {Ref,Opaque}]),
     Cs = proplists:get_value(counters, Opaque, []),
     case ets:lookup(Mons, {Pid,Ref}) of
 	[] ->
@@ -866,18 +869,6 @@ do_modify_counter_regulator(Name, Opts, #queue{regulators = Regs} = Q) ->
         _ ->
             badarg
     end.
-
-job_queued(#queue{check_counter = Limit,
-		  check_n = Ctr} = Q, TS, S) when is_integer(Limit) ->
-    case Ctr + 1 of
-	C when C >= Limit ->
-	    perform_queue_check(Q, TS, S);
-	C ->
-	    update_queue(Q#queue{check_n = C}, S)
-    end;
-job_queued(Q, _TS, S) ->
-    update_queue(Q, S).
-
 
 perform_queue_check(Q, TS, S) ->
     Q1 = maybe_cancel_timer(Q),
@@ -1035,20 +1026,7 @@ check_cr(Val, I, Max) ->
 calc_input_rate(T, Avg) ->
     calc_rate(1, T, Avg).
 
-%% calc_rate(N, T, #avg{rate = R, count = C, prev_t = PrevT, lambda = Y} = Avg) ->
-%%     case (T - PrevT) of
-%% 	Diff when Diff < 0 ->
-%% 	    %% using os:timestamp(), this could happen
-%% 	    Avg#avg{count = N, prev_t = T};
-%% 	Diff when Diff < 100000, C < 101 ->
-%% 	    Avg#avg{count = C+N};
-%% 	Diff ->
-%% 	    R1 = 1000000*C/Diff,
-%% 	    Avg#avg{rate = R1*Y + R*(1-Y), count = 1, prev_t = T}
-%%     end.
-
 calc_rate(N, T, #avg{rate = R, count = C, prev_t = PrevSlot, lambda = Y} = Avg) ->
-    C1 = C+N-1,
     SlotSz = ?AVG_SLOT,
     case T div SlotSz of
 	PrevSlot ->
@@ -1062,25 +1040,12 @@ calc_rate(N, T, #avg{rate = R, count = C, prev_t = PrevSlot, lambda = Y} = Avg) 
 	    NewR = avg(NSlots, Steps, R, Y),
 	    Avg#avg{rate = NewR, count = N, prev_t = NewSlot}
     end.
-    %% case (T - PrevT) of
-    %% 	Diff when Diff < 0 ->
-    %% 	    %% using os:timestamp(), this could happen
-    %% 	    Avg#avg{count = N, prev_t = T};
-    %% 	%% Diff when Diff < 10000, C1 < 10 ->
-    %% 	%%     Avg#avg{count = C+N};
-    %% 	Diff when Diff > 1000000 ->
-    %% 	    R1 = 1000000*C1/Diff,
-    %% 	    Avg#avg{rate = R1*Y + R*(1-Y), count = 1, prev_t = T};
-    %% 	Diff when Diff < 10000 ->
-    %% 	    Avg#avg{count = C+N};
-    %% 	Diff ->
-    %% 	    NSlots = Diff div Slot,
-    %% 	    R1 = 1000000*C1/Diff,
-    %% 	    RSteps = (R1 - R) / NSlots,
-    %% 	    io:fwrite("NSlots = ~p; R1 = ~p; RSteps = ~p~n", [NSlots, R1, RSteps]),
-    %% 	    NewR = avg(NSlots, RSteps, R, Y),
-    %% 	    Avg#avg{rate = NewR, count = 1, prev_t = T}
-    %% end.
+
+prel_rate(#avg{rate = R, count = C, lambda = Y}) when C > 5 ->
+    R1 = C*(1000000/?AVG_SLOT),
+    R1*Y + R*(1-Y);
+prel_rate(#avg{rate = R}) ->
+    R.
 
 avg(0, _, R, _) ->
     R;
@@ -1161,12 +1126,12 @@ restore_counters(Cs, #st{} = S) ->
     lists:foldl(fun restore_counter/2, {[], S}, Cs).
 
 restore_counter({C, I}, {Revisit, #st{counters = Counters} = S}) ->
-    #cr{value = Val, queues = Qs, rate = #rate{limit = Max}} = CR =
+    #cr{value = Val, queues = Qs, rate = #rate{}} = CR =
 	lists:keyfind(C, #cr.name, Counters),
     CR1 = CR#cr{value = Val - I},
     Counters1 = lists:keyreplace(C, #cr.name, Counters, CR1),
     S1 = S#st{counters = Counters1},
-    if Val == Max, I > 0 ->
+    if I > 0 ->
 	    {union(Qs, Revisit), S1};
        true ->
 	    {Revisit, S1}
@@ -1176,15 +1141,21 @@ union(L1, L2) ->
     (L1 -- L2) ++ L2.
 
 revisit_queues(Qs, S) ->
-    [revisit_queue(Q) || Q <- Qs],
-    S.
+    TS = timestamp(),
+    lists:foldl(
+      fun(QName, #st{queues = Queues} = Sx) ->
+	      Q = get_queue(QName, Queues),
+	      perform_queue_check(Q, TS, Sx)
+      end, S, Qs).
+    %% [revisit_queue(Q) || Q <- Qs],
+    %% S.
 
 revisit_queue(Qname) ->
     self() ! {check_queue, Qname}.
 
 update_queue(#queue{name = N, type = T} = Q, #st{queues = Qs} = S) ->
     Q1 = case T of
-	     {passive, _} -> Q;
+	     #passive{} -> Q;
 	     _ ->
 		 start_timer(Q)
 	 end,
@@ -1289,7 +1260,12 @@ apply_corr(Type, Corr, R) ->
 			 {Type, Corr}),
     R#rate{active_modifiers = ADs}.
 
-
+get_rate_limit(#queue{regulators = Rs}, S) ->
+    Regs = expand_regulators(Rs, S),
+    lists:foldl(
+      fun(R, Acc) ->
+	      erlang:min(get_rate(R), Acc)
+      end, 10000, Regs).
 
 get_rate(#rr {rate = R}) -> R;
 get_rate(#cr {rate = R}) -> R;
@@ -1318,11 +1294,11 @@ queue_job(TS, From, #queue{max_size = MaxSz} = Q, S) ->
                 {OldJobs, Q1} ->
                     [timeout(J) || J <- OldJobs],
                     %% update_queue(q_in(TS, From, Q1), S)
-                    job_queued(q_in(TS, From, Q1), TS, S)
+                    perform_queue_check(q_in(TS, From, Q1), TS, S)
             end;
        true ->
             %% update_queue(q_in(TS, From, Q), S)
-            job_queued(q_in(TS, From, Q), TS, S)
+            perform_queue_check(q_in(TS, From, Q), TS, S)
     end.
 
 do_enqueue(TS, Item, #queue{max_size = MaxSz} = Q, S) ->
@@ -1355,7 +1331,7 @@ select_queue(Type, _, #st{q_select = M, q_select_st = MS, info_f = I} = S) ->
 %% The callback module must implement the functions below.
 %%
 q_new(Opts) ->
-    [Name, Mod, Type, MaxTime, MaxSize] = 
+    [Name, Mod, Type, MaxTime, MaxSize] =
         [get_value(K, Opts, Def) || {K, Def} <- [{name, undefined},
                                                  {mod , jobs_queue},
 						 {type, fifo},
