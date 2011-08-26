@@ -18,7 +18,7 @@
 %% File    : jobs_server.erl
 %% @author  : Ulf Wiger <ulf.wiger@erlang-solutions.com>
 %% @end
-%% Description : 
+%% Description :
 %%
 %% Created : 15 Jan 2010 by Ulf Wiger <ulf.wiger@erlang-solutions.com>
 %%-------------------------------------------------------------------
@@ -62,7 +62,6 @@
          handle_info/2,
          terminate/2,
          code_change/3]).
-
 
 -import(proplists, [get_value/3]).
 
@@ -113,6 +112,8 @@ run(Type, Fun) when is_function(Fun, 0) ->
 
 -spec done(reg_obj()) -> ok.
 %%
+done({undefined,[]}) ->
+    ok;
 done(Opaque) ->
     gen_server:cast(?MODULE, {done, Opaque}).
 
@@ -236,6 +237,9 @@ start_link() ->
 start_link(Opts0) when is_list(Opts0) ->
     Opts = expand_opts(Opts0),
     gen_server:start_link({local,?MODULE}, ?MODULE, Opts, []).
+			  %% [{spawn_opt,
+			  %%   [{min_heap_size, 10000},
+			  %%    {fullsweep_after, 0}]}]).
 
 %% Server-side callbacks and helpers
 
@@ -318,13 +322,29 @@ init_queue({Name, Action}, _S) when Action==approve; Action==reject ->
 init_queue({Name, producer, F, Opts}, S) ->
     init_queue({Name, [{type, {producer, F}} | Opts]}, S);
 init_queue({Name, Opts}, S) when is_list(Opts) ->
-    [ChkI, Regs] =
+    [ChkI, CheckCounter, Regs, Lambda] =
         [get_value(K,Opts,D) ||
             {K, D} <- [{check_interval,undefined},
-                       {regulators, []}]],
+		       {check_counter, undefined},
+                       {regulators, []},
+		       {lambda, (#avg{})#avg.lambda}]],
     Q0 = q_new([{name,Name}|Opts]),
-    Q1 = init_regulators(Regs, Q0#queue{check_interval = ChkI}),
-    calculate_check_interval(Q1, S).
+    Avg = #avg{lambda = Lambda},
+    Q1 = init_regulators(Regs, Q0#queue{check_interval = ChkI,
+					check_counter = CheckCounter,
+					avg_in = Avg,
+					avg_out = Avg
+				       }),
+    RateOnly = is_rate_only(Q1#queue.regulators),
+    calculate_check_interval(Q1#queue{rate_only = RateOnly}, S).
+
+is_rate_only(Rs) ->
+    case [RR || #rr{} = RR <- Rs] of
+	[_] ->
+	    [] == ( [CR || #cr{} = CR <- Rs] ++ [GR || {_, _} = GR <- Rs] );
+	_ ->
+	    false
+    end.
 
 calculate_check_interval(#queue{regulators = Rs,
 				check_interval = undefined} = Q, S) ->
@@ -493,10 +513,11 @@ interval(Limit) ->
     1000 / Limit.
 
 set_info(S) ->
-    S#st{info_f = fun(Q) ->
-                          %% We need to clear the info_f attribute, to
-                          %% avoid recursively inheriting all previous states.
-                          get_info(Q, S#st{info_f = undefined})
+    %% We need to clear the info_f attribute, to
+    %% avoid recursively inheriting all previous states.
+    S1 = S#st{info_f = undefined},
+    S1#st{info_f = fun(Q) ->
+			   get_info(Q, S1)
                   end}.
 
 
@@ -524,8 +545,21 @@ i_handle_call({ask, Type}, From, #st{queues = Qs} = S) ->
 	#queue{type = #action{a = reject}}  -> reject(From)     , {noreply, S1};
 	#queue{type = #producer{}} ->
 	    {reply, badarg, S1};
-        #queue{} = Q ->
-            {noreply, queue_job(TS, From, Q, S1)};
+        #queue{avg_in = AvgIn} = Q ->
+	    NewAvgIn = calc_input_rate(TS, AvgIn),
+	    Q1 = Q#queue{avg_in = NewAvgIn},
+	    case Q1#queue.rate_only andalso
+		q_is_empty(Q1) andalso
+		can_approve_direct(NewAvgIn#avg.rate, Q1) of
+		true ->
+		    approve(From, []),
+		    {noreply, update_queue(
+				new_avg_out(1,
+				Q1#queue{latest_dispatch = TS,
+					 approved = Q1#queue.approved+1}), S)};
+		false ->
+		    {noreply, queue_job(TS, From, Q1#queue{queued = Q1#queue.queued + 1}, S1)}
+	    end;
         false ->
             {reply, badarg, S1}
     end;
@@ -833,13 +867,17 @@ do_modify_counter_regulator(Name, Opts, #queue{regulators = Regs} = Q) ->
             badarg
     end.
 
-job_queued(#queue{check_counter = Ctr} = Q, TS, S) ->
+job_queued(#queue{check_counter = Limit,
+		  check_n = Ctr} = Q, TS, S) when is_integer(Limit) ->
     case Ctr + 1 of
-	C when C > 10 ->
+	C when C >= Limit ->
 	    perform_queue_check(Q, TS, S);
 	C ->
-	    update_queue(Q#queue{check_counter = C}, S)
-    end.
+	    update_queue(Q#queue{check_n = C}, S)
+    end;
+job_queued(Q, _TS, S) ->
+    update_queue(Q, S).
+
 
 perform_queue_check(Q, TS, S) ->
     Q1 = maybe_cancel_timer(Q),
@@ -849,8 +887,9 @@ perform_queue_check(Q, TS, S) ->
 	{N, Counters, Regs} when N > 0 ->
 	    {Jobs, Q2} = dispatch_N(N, Counters, Q1, S),
 	    {Q3, S3} = update_regulators(
-			 Regs, Q2#queue{latest_dispatch = TS,
-					check_counter = 0}, S),
+			 Regs, new_avg_out(length(Jobs),
+					   Q2#queue{latest_dispatch = TS,
+						    check_n = 0}), S),
 	    update_counters(Jobs, Counters, update_queue(Q3, S3));
 	Bad ->
 	    erlang:error({bad_N, Bad})
@@ -880,11 +919,21 @@ do_check_queue(#queue{regulators = Regs0} = Q, TS, S) ->
     {N, Counters} = check_regulators(Regs, TS, Q),
     {N, Counters, Regs}.
 
+%% for rate-only queues
+can_approve_direct(Rate, #queue{rate_only = true, regulators = Regs}) ->
+    [#rr{rate = #rate{limit = Limit}}] = [R || #rr{} = R <- Regs],
+    (Limit > 400) andalso (Rate < Limit).
 
 -type exp_regulator() :: {#cr{}, integer() | undefined} | #rr{} | #grp{}.
 
 -spec expand_regulators([regulator()], #st{}) -> [exp_regulator()].
 %%
+expand_regulators([#rr{} = R|Regs], S) ->
+    [R|expand_regulators(Regs, S)];
+expand_regulators([#cr{} = R|Regs], S) ->
+    [R|expand_regulators(Regs, S)];
+expand_regulators([], _) ->
+    [];
 expand_regulators([#group_rate{name = R}|Regs], #st{group_rates = GRs} = S) ->
     case get_group(R, GRs) of
 	false       -> expand_regulators(Regs, S);
@@ -895,13 +944,7 @@ expand_regulators([#counter{name = C,
     case get_counter(C, Cs) of
 	false      -> expand_regulators(Regs, S);
 	#cr{} = CR -> [{CR,I}|expand_regulators(Regs, S)]
-    end;
-expand_regulators([#rr{} = R|Regs], S) ->
-    [R|expand_regulators(Regs, S)];
-expand_regulators([#cr{} = R|Regs], S) ->
-    [R|expand_regulators(Regs, S)];
-expand_regulators([], _) ->
-    [].
+    end.
 
 get_counters(QName, #st{queues = Qs} = S) ->
     case get_queue(QName, Qs) of
@@ -949,11 +992,12 @@ check_regulators(Regs, TS, #queue{latest_dispatch = TL}) ->
 
 check_regulators([R|Regs], TS, TL, N, Cs) ->
     case R of
-	#rr{rate = #rate{interval = I}} ->
-	    N1 = check_rr(I, TS, TL),
+	#rr{rate = #rate{limit = Limit}} ->
+	    N1 = check_rr(Limit, TS, TL),
 	    check_regulators(Regs, TS, TL, erlang:min(N, N1), Cs);
-	#grp{rate = #rate{interval = I}, latest_dispatch = TLg} ->
-	    N1 = check_rr(I, TS, TLg),
+	#grp{rate = #rate{limit = Limit},
+	     latest_dispatch = TLg} ->
+	    N1 = check_rr(Limit, TS, TLg),
 	    check_regulators(Regs, TS, TL, erlang:min(N, N1), Cs);
 	{#cr{} = CR, Il} ->
 	    #cr{name = Name,
@@ -975,10 +1019,10 @@ check_regulators([], _, _, N, Cs) ->
 cr_increment(Ig, undefined) -> Ig;
 cr_increment(_ , Il) when is_integer(Il) -> Il.
 
-check_rr(undefined, _, _) ->
-    0;
-check_rr(I, TS, TL) when TS > TL, I > 0 ->
-    trunc((TS - TL)/(I*1000)).
+check_rr(Limit, TS, TL) when TS > TL ->
+    erlang:min(Limit, trunc(Limit*(TS - TL)/1000000));
+check_rr(_, _, _) ->
+    0.
 
 check_cr(Val, I, Max) ->
     case Max - Val of
@@ -987,6 +1031,26 @@ check_cr(Val, I, Max) ->
 	_ ->
 	    0
     end.
+
+calc_input_rate(T, Avg) ->
+    calc_rate(1, T, Avg).
+
+calc_rate(N, T, #avg{rate = R, count = C, prev_t = PrevT, lambda = Y} = Avg) ->
+    case (T - PrevT) of
+	Diff when Diff < 0 ->
+	    %% using os:timestamp(), this could happen
+	    Avg#avg{count = N, prev_t = T};
+	Diff when Diff < 100000, C < 101 ->
+	    Avg#avg{count = C+N};
+	Diff ->
+	    R1 = 1000000*C/Diff,
+	    Avg#avg{rate = R1*Y + R*(1-Y), count = 1, prev_t = T}
+    end.
+
+new_avg_out(N, #queue{avg_out = AvgOut,
+		      latest_dispatch = T} = Q) ->
+    NewAvgOut = calc_rate(N, T, AvgOut),
+    Q#queue{avg_out = NewAvgOut}.
 
 -spec dispatch_N(integer() | infinity, [any()], #queue{}, #st{}) ->
 			{list(), #queue{}}.
@@ -1000,6 +1064,14 @@ dispatch_N(N, _Counters, #queue{name = QName,
 	      ets:insert(Mons, {{Pid,Ref}, QName})
       end, Jobs),
     {Jobs, Q};
+dispatch_N(N, [], Q, _) ->
+    {Jobs, _Q1} = Res = q_out(N, Q),
+    lists:foreach(
+      fun(Job) ->
+	      {_, Client, Opaque} = job_opaque(Job, []),
+	      approve(Client, {undefined, Opaque})
+      end, Jobs),
+    Res;
 dispatch_N(N, Counters, Q, #st{monitors = Mons}) ->
     {Jobs, _Q1} = Res = q_out(N, Q),
     Opaque0 = [{counters, Counters}],
@@ -1092,14 +1164,11 @@ start_timer(#queue{name = Name} = Q) ->
     case next_time(timestamp(), Q) of
         T when is_integer(T) ->
             Msg = {check_queue, Name},
-            TRef = do_send_after(T, Msg),
+	    TRef = erlang:send_after(T, self(), Msg),
             Q#queue{timer = TRef};
         undefined ->
             Q
     end.
-
-do_send_after(T, Msg) ->
-    erlang:send_after(T, self(), Msg).
 
 apply_modifiers(Modifiers, #queue{regulators = Rs} = Q) ->
     Rs1 = [apply_modifiers(Modifiers, R) || R <- Rs],
@@ -1311,7 +1380,7 @@ next_time(TS, #queue{latest_dispatch = TS1,
 %% Microsecond timestamp; never wraps
 timestamp() ->
     %% Invented epoc is {1258,0,0}, or 2009-11-12, 4:26:40
-    {MS,S,US} = erlang:now(),
+    {MS,S,US} = os:timestamp(),
     (MS-1258)*1000000000000 + S*1000000 + US.
 
 timestamp_to_datetime(TS) ->

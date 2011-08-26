@@ -99,19 +99,27 @@
 -record(passive , {type = fifo   :: fifo}).
 -record(action  , {a = approve   :: approve | reject}).
 
+-record(avg, {rate = 0, count = 1, prev_t = 0, lambda = 0.2}).
+
 -record(queue, {name                 :: any(),
 		mod                  :: atom(),
 		type = fifo          :: fifo | #producer{} | #passive{}
 				      | #action{},
 		group                :: atom(),
 		regulators  = []     :: [regulator() | regulator_ref()],
+		rate_only = false    :: boolean(),
 		max_time             :: undefined | integer(),
 		max_size             :: undefined | integer(),
 		latest_dispatch = 0  :: integer(),
+		avg_in = #avg{}      :: #avg{},
+		avg_out = #avg{}     :: #avg{},
+		approved = 0,
+		queued = 0,
 		check_interval       :: integer() | mfa(),
 		oldest_job           :: undefined | integer(),
 		timer,
-		check_counter = 0    :: integer(),
+		check_counter = undefined :: integer() | undefined,
+		check_n = 0          :: integer(),
 		waiters = []         :: [{pid(), reference()}],
 		st
 	       }).

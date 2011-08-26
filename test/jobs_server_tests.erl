@@ -2,6 +2,7 @@
 
 
 -include_lib("eunit/include/eunit.hrl").
+-include("jobs.hrl").
 
 rate_test_() ->
      {foreachx,
@@ -50,23 +51,63 @@ counter_run(N, Target) ->
 
 time_eval(_R, _N, T, Ts, Expected) ->
     [{Hd,_}|Tl] = lists:sort(Ts),
+    Starts = [Time || {_, Time} <- Ts],
+    Rates = calc_rates(Starts),
     Diffs = [X-Hd || {X,_} <- Tl],
     Ratio = T/Expected,
     Max = lists:max(Diffs),
     {Mean, Variance} = time_variance(Diffs),
+    {Direct, Queued, AvgIn, AvgOut} = get_stats(queue_info(q)),
     io:fwrite(user,
 	      "Time: ~p, Ratio = ~.1f, Max = ~p, "
-	      "Mean = ~.1f, Variance = ~.1f~n",
-	      [T, Ratio, Max, Mean, Variance]).
-    
+	      "Mean = ~.1f, Variance = ~.1f~n"
+	      "Rates = ~w~n"
+	      "Approved direct = ~p; Queued = ~p~n"
+	      "AvgIn  = ~p~n"
+	      "AvgOut = ~p~n",
+	      [T, Ratio, Max, Mean, Variance, Rates,
+	       Direct, Queued, AvgIn, AvgOut]).
+
+calc_rates(Ts) ->
+    Length = length(Ts),
+    SubLength = Length div 10,
+    Lists = split(SubLength, lists:sort(Ts)),
+    [calc_rate(L) || L <- Lists].
+
+split(_, []) -> [];
+split(0, L)  -> [L];
+split(Len, L) ->
+    try {L1, L2} = lists:split(Len, L),
+	 [L1 | split(Len, L2)]
+    catch
+	error:_ ->
+	    [L]
+    end.
+
+calc_rate([_]) ->
+    undefined;
+calc_rate(L) ->
+    Len = length(L),
+    I = ( (lists:last(L) - hd(L)) / (length(L) - 1) ) / 1000000,
+    {trunc(1/I), Len}.
+
+queue_info(Q) ->
+    jobs_server:queue_info(Q).
+
+get_stats({queue, Info}) ->
+    [Appr, Queued, AvgIn, AvgOut] =
+	[proplists:get_value(K,Info) || K <- [approved,
+					      queued,
+					      avg_in,
+					      avg_out]],
+    {Appr, Queued, AvgIn, AvgOut}.
+
 
 time_variance(L) ->
     N = length(L),
     Mean = lists:sum(L) / N,
     SQ = fun(X) -> X*X end,
     {Mean, math:sqrt(lists:sum([SQ(X-Mean) || X <- L]) / N)}.
-		 
-
 
 counter_test(Count) ->
     start_test_server({count,Count}),
@@ -84,7 +125,10 @@ pmap(F, N) ->
 collect([{_P,Ref}|Ps]) ->
     receive
 	{'DOWN', Ref, _, _, Res} ->
-	    [Res|collect(Ps)]
+	    case Res of
+		{T, _} when is_integer(T) ->
+		    [Res|collect(Ps)]
+	    end
     end;
 collect([]) ->
     [].
@@ -98,6 +142,7 @@ start_test_server(Silent, {rate,Rate}) ->
 						     {limit, Rate}]
 					      }]}
 					    %% , {mod, jobs_queue_list}
+					    , {check_counter, 3}
 					   ]}
 				      ]}
 			    ]),
