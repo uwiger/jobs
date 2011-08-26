@@ -1035,17 +1035,58 @@ check_cr(Val, I, Max) ->
 calc_input_rate(T, Avg) ->
     calc_rate(1, T, Avg).
 
-calc_rate(N, T, #avg{rate = R, count = C, prev_t = PrevT, lambda = Y} = Avg) ->
-    case (T - PrevT) of
-	Diff when Diff < 0 ->
-	    %% using os:timestamp(), this could happen
-	    Avg#avg{count = N, prev_t = T};
-	Diff when Diff < 100000, C < 101 ->
+%% calc_rate(N, T, #avg{rate = R, count = C, prev_t = PrevT, lambda = Y} = Avg) ->
+%%     case (T - PrevT) of
+%% 	Diff when Diff < 0 ->
+%% 	    %% using os:timestamp(), this could happen
+%% 	    Avg#avg{count = N, prev_t = T};
+%% 	Diff when Diff < 100000, C < 101 ->
+%% 	    Avg#avg{count = C+N};
+%% 	Diff ->
+%% 	    R1 = 1000000*C/Diff,
+%% 	    Avg#avg{rate = R1*Y + R*(1-Y), count = 1, prev_t = T}
+%%     end.
+
+calc_rate(N, T, #avg{rate = R, count = C, prev_t = PrevSlot, lambda = Y} = Avg) ->
+    C1 = C+N-1,
+    SlotSz = ?AVG_SLOT,
+    case T div SlotSz of
+	PrevSlot ->
 	    Avg#avg{count = C+N};
-	Diff ->
-	    R1 = 1000000*C/Diff,
-	    Avg#avg{rate = R1*Y + R*(1-Y), count = 1, prev_t = T}
+	NewSlot when NewSlot - PrevSlot > 10 ->
+	    Avg#avg{count = N, prev_t = NewSlot};
+	NewSlot ->
+	    NSlots = erlang:max(NewSlot - PrevSlot - 1, 1),
+	    R1 = C*(1000000/SlotSz)/NSlots,
+	    Steps = (R1 - R)/NSlots,
+	    NewR = avg(NSlots, Steps, R, Y),
+	    Avg#avg{rate = NewR, count = N, prev_t = NewSlot}
     end.
+    %% case (T - PrevT) of
+    %% 	Diff when Diff < 0 ->
+    %% 	    %% using os:timestamp(), this could happen
+    %% 	    Avg#avg{count = N, prev_t = T};
+    %% 	%% Diff when Diff < 10000, C1 < 10 ->
+    %% 	%%     Avg#avg{count = C+N};
+    %% 	Diff when Diff > 1000000 ->
+    %% 	    R1 = 1000000*C1/Diff,
+    %% 	    Avg#avg{rate = R1*Y + R*(1-Y), count = 1, prev_t = T};
+    %% 	Diff when Diff < 10000 ->
+    %% 	    Avg#avg{count = C+N};
+    %% 	Diff ->
+    %% 	    NSlots = Diff div Slot,
+    %% 	    R1 = 1000000*C1/Diff,
+    %% 	    RSteps = (R1 - R) / NSlots,
+    %% 	    io:fwrite("NSlots = ~p; R1 = ~p; RSteps = ~p~n", [NSlots, R1, RSteps]),
+    %% 	    NewR = avg(NSlots, RSteps, R, Y),
+    %% 	    Avg#avg{rate = NewR, count = 1, prev_t = T}
+    %% end.
+
+avg(0, _, R, _) ->
+    R;
+avg(N, Step, R, Y) when N > 0 ->
+    avg(N-1, Step, (R+Step)*Y + R*(1-Y), Y).
+
 
 new_avg_out(N, #queue{avg_out = AvgOut,
 		      latest_dispatch = T} = Q) ->

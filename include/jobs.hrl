@@ -99,7 +99,11 @@
 -record(passive , {type = fifo   :: fifo}).
 -record(action  , {a = approve   :: approve | reject}).
 
--record(avg, {rate = 0, count = 1, prev_t = 0, lambda = 0.2}).
+-define(AVG_SLOT, 100000).
+
+-record(avg, {rate = 0, count = 1,
+	      prev_t = jobs_lib:timestamp() div ?AVG_SLOT,
+	      lambda = 0.01}).
 
 -record(queue, {name                 :: any(),
 		mod                  :: atom(),
