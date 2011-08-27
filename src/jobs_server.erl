@@ -925,8 +925,6 @@ can_approve_direct(Rate, #queue{rate_only = true, regulators = Regs}) ->
 %%
 expand_regulators([#rr{} = R|Regs], S) ->
     [R|expand_regulators(Regs, S)];
-expand_regulators([{#cr{},_} = R|Regs], S) ->
-    [R|expand_regulators(Regs, S)];
 expand_regulators([#cr{} = R|Regs], S) ->
     [R|expand_regulators(Regs, S)];
 expand_regulators([], _) ->
@@ -1189,8 +1187,14 @@ start_timer(#queue{name = Name} = Q) ->
     end.
 
 apply_modifiers(Modifiers, #queue{regulators = Rs} = Q, S) ->
-    ExpRs = expand_regulators(Rs, S),
-    Rs1 = [apply_modifiers(Modifiers, R, S) || R <- ExpRs],
+    Rs1 = lists:map(
+	    fun(#rr{} = R) ->
+		    apply_modifiers(Modifiers, R, S);
+	       (#cr{} = R) ->
+		    apply_modifiers(Modifiers, R, S);
+	       (Other) ->
+		    Other
+	    end, Rs),
     Q#queue{regulators = Rs1};
 apply_modifiers(Modifiers, Regulator, _) ->
     with_modifiers(Modifiers, Regulator, fun apply_damper/4).
@@ -1274,12 +1278,10 @@ get_rate_limit(#queue{regulators = Rs}, S) ->
 	      erlang:min(get_rate(R), Acc)
       end, 10000, Regs).
 
-get_rate({#cr{rate = R}, _}) -> R;
 get_rate(#rr {rate = R}) -> R;
 get_rate(#cr {rate = R}) -> R;
 get_rate(#grp{rate = R}) -> R.
 
-set_rate(R, {#cr{}=Reg,X}) -> {Reg#cr{rate = R},X};
 set_rate(R, #rr {} = Reg) -> Reg#rr {rate = R};
 set_rate(R, #cr {} = Reg) -> Reg#cr {rate = R};
 set_rate(R, #grp{} = Reg) -> Reg#grp{rate = R}.
