@@ -34,8 +34,6 @@ dist_test_() ->
      [
       {with, [fun apply_feedback/1]}
      ]}.
-	     
-
 
 with_msg_sampler(Rate) ->
     application:unload(jobs),
@@ -45,7 +43,13 @@ with_msg_sampler(Rate) ->
 				  [{rate, [
 					   {limit, Rate},
 					   {modifiers,
-					    [{test,10, {max,5}}]}]}]}
+					    [{test,10, {max,5}}]}]},
+				   {counter, [
+					      {limit, Rate},
+					      {modifiers,
+					       [{test,10, {max, 5}}]}
+					     ]}
+				  ]}
 				]}
 			   ]},
 		  {samplers, [{test, jobs_sampler_slave,
@@ -102,8 +106,7 @@ apply_feedback({Remote, Rate}) ->
     kick_sampler(Remote, 3),
     io:fwrite(user, "[Remote] get_rate() -> ~p~n", [get_rate()]),
     ?assertEqual(get_rate(), Rate - 15).
-    
-    
+
 get_rate() ->
     jobs:queue_info(q, rate_limit).
 
