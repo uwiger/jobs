@@ -49,6 +49,7 @@
 -record(rate, {limit = 0,
 	       preset_limit = 0,
 	       interval,
+	       batch = 1,
 	       modifiers = [],
 	       active_modifiers = []}).
 
@@ -94,16 +95,40 @@
 
 -type m_f_args() :: {atom(), atom(), list()}.
 
--record(producer, {f={erlang,error,[undefined_producer]}
-		   :: m_f_args() | function()}).
+%% -record(producer, {f={erlang,error,[undefined_producer]}
+%% 		   :: m_f_args() | function(),
+%% 		   mode = spawn :: spawn | {stateful, }).
+-record(producer, {mod = jobs_prod_simple,
+		   state}).
 -record(passive , {type = fifo   :: fifo}).
 -record(action  , {a = approve   :: approve | reject}).
 
--define(AVG_SLOT, 100000).
+%% Time slot size for input rate calculation, in microseconds.
+-define(AVG_SLOT, 100000).  % 100 ms
 
--record(avg, {rate = 0, count = 1,
+%% "Burst threshold" for input rate calculation. If the number of requests
+%% within the current time slot exceeds this value, we will automatically start
+%% queueing. 0 means we always queue.
+-define(AVG_THR, 0).
+
+-record(avg_rate, {r_10 = 0,     % last 10 ms
+		   r_100 = 0,    % last 100 ms
+		   r_1000 = 0,   % last 1 sec
+		   r_10000 = 0}).  % last 10 sec
+
+-record(avg, {rate = #avg_rate{}    :: #avg_rate{},
+	      count = 1             :: integer(),
+	      count_threshold = ?AVG_THR  :: integer(),
 	      prev_t = jobs_lib:timestamp() div ?AVG_SLOT,
-	      lambda = 0.01}).
+	      slot_size = ?AVG_SLOT :: integer(),
+	      lambda = 0.01         :: float()}).
+
+-record(win, {slot_size :: integer(),
+	      count = 0 :: integer(),
+	      prev_slot = 0 :: integer(),
+	      window = <<>> :: binary(),
+	      keep = 0 :: integer()}).
+
 
 -record(queue, {name                 :: any(),
 		mod                  :: atom(),

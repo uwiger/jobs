@@ -4,6 +4,9 @@
 -include_lib("eunit/include/eunit.hrl").
 -include("jobs.hrl").
 
+-export([start_test_server/1]).
+-export([run_steady_rate/3]).
+
 rate_test_() ->
      {foreachx,
       fun(Type) -> start_test_server(Type) end,
@@ -57,16 +60,16 @@ time_eval(_R, _N, T, Ts, Expected) ->
     Ratio = T/Expected,
     Max = lists:max(Diffs),
     {Mean, Variance} = time_variance(Diffs),
-    {Direct, Queued, AvgIn, AvgOut} = get_stats(queue_info(q)),
+    {Appr, Queued, AvgIn, AvgOut} = get_stats(queue_info(q)),
     io:fwrite(user,
 	      "Time: ~p, Ratio = ~.1f, Max = ~p, "
 	      "Mean = ~.1f, Variance = ~.1f~n"
 	      "Rates = ~w~n"
-	      "Approved direct = ~p; Queued = ~p~n"
+	      "Approved = ~p; Queued = ~p~n"
 	      "AvgIn  = ~p~n"
 	      "AvgOut = ~p~n",
 	      [T, Ratio, Max, Mean, Variance, Rates,
-	       Direct, Queued, AvgIn, AvgOut]).
+	       Appr, Queued, AvgIn, AvgOut]).
 
 calc_rates(Ts) ->
     Length = length(Ts),
@@ -88,8 +91,13 @@ calc_rate([_]) ->
     undefined;
 calc_rate(L) ->
     Len = length(L),
-    I = ( (lists:last(L) - hd(L)) / (length(L) - 1) ) / 1000000,
-    {trunc(1/I), Len}.
+    try
+	I = ( (lists:last(L) - hd(L)) / (length(L) - 1) ) / 1000000,
+	{trunc(1/I), Len}
+    catch
+	error:_ ->
+	    0
+    end.
 
 queue_info(Q) ->
     jobs_server:queue_info(Q).
@@ -109,13 +117,13 @@ time_variance(L) ->
     SQ = fun(X) -> X*X end,
     {Mean, math:sqrt(lists:sum([SQ(X-Mean) || X <- L]) / N)}.
 
-counter_test(Count) ->
-    start_test_server({count,Count}),
-    Res = tc(fun() ->
-		     pmap(fun() -> jobs:run(q, one_job(count)) end, Count * 2)
-	     end),
-    io:fwrite(user, "~p~n", [Res]),
-    stop_server().
+%% counter_test(Count) ->
+%%     start_test_server({count,Count}),
+%%     Res = tc(fun() ->
+%% 		     pmap(fun() -> jobs:run(q, one_job(count)) end, Count * 2)
+%% 	     end),
+%%     io:fwrite(user, "~p~n", [Res]),
+%%     stop_server().
 
 
 pmap(F, N) ->
@@ -143,6 +151,7 @@ start_test_server(Silent, {rate,Rate}) ->
 					      }]}
 					    %% , {mod, jobs_queue_list}
 					    , {check_counter, 3}
+					    , {slot_size, 100000}
 					   ]}
 				      ]}
 			    ]),
@@ -169,6 +178,7 @@ start_test_server(Silent, {count, Count}) ->
 		    ]).
 
 start_with_conf(Silent, Conf) ->
+    stop_server(),
     application:unload(jobs),
     application:load(jobs),
     [application:set_env(jobs, K, V) ||	{K,V} <- Conf],
@@ -192,9 +202,37 @@ tc(F) ->
 run_jobs(Q,N) ->
     [run_job(Q, one_job(time)) || _ <- lists:seq(1,N)].
 
+run_steady_rate(Q, N, R) ->
+    Step = 1000000 div R,  % microsecs
+    {Pids, _} =
+	lists:mapfoldl(
+	  fun(N1, T) ->
+		  T1 = T + Step,
+		  Timeout = T1 div 1000,
+		  io:fwrite("Timeout = ~p~n", [Timeout]),
+		  {spawn_monitor(
+		     fun() ->
+			     receive
+			     after Timeout ->
+				     {Wait,_} = run_job(Q, one_job(count)),
+				     EstRate = get_est_rate(Q, avg_in),
+				     exit({N1, {Wait,EstRate}})
+			     end
+		     end), T1}
+	  end, 0, lists:seq(1, N)),
+    collect(Pids).
+
+get_est_rate(Q, I) ->
+    #avg{rate = R} = jobs:queue_info(Q, I),
+    R.
+
 run_job(Q,F) ->
     timer:tc(jobs,run,[Q,F]).
 
+one_job({stats,Q}) ->
+    fun() ->
+	    jobs:queue_info(Q, avg_out)
+    end;
 one_job(time) ->
     fun timestamp/0;
 one_job(count) ->

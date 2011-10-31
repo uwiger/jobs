@@ -158,7 +158,7 @@ info(max_time  , #queue{max_time = T}   ) -> T;
 info(oldest_job, #queue{oldest_job = OJ}) -> OJ;
 info(length    , #queue{st = #st{table = Tab}}) ->
     ets:info(Tab, size).
-    
+
 -spec timedout(#queue{}) -> [] | {[entry()], #queue{}}.
 %% @spec timedout(#queue{}) -> [] | {[Entry], #queue{}}
 %% @doc Return all entries that have been in the queue longer than MaxTime.
