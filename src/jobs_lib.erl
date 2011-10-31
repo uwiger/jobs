@@ -17,7 +17,8 @@
 -module(jobs_lib).
 
 -export([timestamp/0,
-         timestamp_to_datetime/1]).
+         timestamp_to_datetime/1,
+	 pmap/2]).
 
 
 timestamp() ->
@@ -33,3 +34,20 @@ timestamp_to_datetime(TS) ->
     MS = TS rem 1000,
     %% return {Datetime, Milliseconds}
     {calendar:now_to_datetime({1258,S,0}), MS}.
+
+pmap(F, L) when is_function(F, 1), is_list(L) ->
+    Pids = [spawn_monitor(fun() -> exit({ok,F(X)}) end) || X <- L],
+    collect(Pids).
+
+collect([{_P,Ref}|Ps]) ->
+    receive
+	{'DOWN', Ref, _, _, Res} ->
+	    case Res of
+		{ok, Result} ->
+		    [Result|collect(Ps)];
+		Other ->
+		    error(Other)
+	    end
+    end;
+collect([]) ->
+    [].

@@ -18,13 +18,13 @@
 %% File    : jobs_queue.erl
 %% @author  : Ulf Wiger <ulf.wiger@erlang-solutions.com>
 %% @end
-%% Description : 
+%% Description :
 %%
 %% Created : 15 Jan 2010 by Ulf Wiger <ulf.wiger@erlang-solutions.com>
 %%-------------------------------------------------------------------
 %% @doc Default queue behaviour for JOBS (using ordered_set ets).
 %%
-%% This module implements the default queue behaviour for JOBS, and also 
+%% This module implements the default queue behaviour for JOBS, and also
 %% specifies the behaviour itself.
 %% @end
 
@@ -46,7 +46,7 @@
 -export([behaviour_info/1]).
 
 -include("jobs.hrl").
--import(jobs_lib, [timestamp/0]).
+-import(jobs_server, [timestamp/0]).
 
 -record(st, {table}).
 
@@ -70,7 +70,7 @@ behaviour_info(_) ->
 %% @doc Instantiate a new queue.
 %%
 %% Options is the list of options provided when defining the queue.
-%% Q is an initial #queue{} record. It can be used directly by including 
+%% Q is an initial #queue{} record. It can be used directly by including
 %% `jobs/include/jobs.hrl', or by using exprecs-style record accessors in the
 %% module `jobs_info'.
 %% See <a href="http://github.com/esl/parse_trans">parse_trans</a> for more info
@@ -101,11 +101,11 @@ delete(#queue{st = #st{table = T}}) ->
 %% @spec in(Timestamp, Job, #queue{}) -> #queue{}
 %% @doc Enqueue a job reference; return the updated queue.
 %%
-%% This puts a job into the queue. The callback function is responsible for 
+%% This puts a job into the queue. The callback function is responsible for
 %% updating the #queue.oldest_job attribute, if needed. The #queue.oldest_job
 %% attribute shall either contain the Timestamp of the oldest job in the queue,
 %% or `undefined' if the queue is empty. It may be noted that, especially in the
-%% fairly trivial case of the `in/3' function, the oldest job would be 
+%% fairly trivial case of the `in/3' function, the oldest job would be
 %% `erlang:min(Timestamp, PreviousOldest)', even if `PreviousOldest == undefined'.
 %% @end
 %%
@@ -127,7 +127,7 @@ peek(#queue{st = #st{table = T}}) ->
 	    Key
     end.
 
--spec out(N :: integer(), #queue{}) -> {[entry()], #queue{}}.
+-spec out(N :: integer() | infinity, #queue{}) -> {[entry()], #queue{}}.
 %% @spec out(N :: integer(), #queue{}) -> {[Entry], #queue{}}
 %% @doc Dequeue a batch of N jobs; return the modified queue.
 %%
@@ -135,6 +135,8 @@ peek(#queue{st = #st{table = T}}) ->
 %% especially if the queue becomes empty.
 %% @end
 %%
+out(infinity,#queue{st = #st{table = T}} = Q) ->
+    {out1(100, T), set_oldest_job(Q)};
 out(N,#queue{st = #st{table = T}}=Q) when N >= 0 ->
     {out1(N, T), set_oldest_job(Q)}.
 
@@ -158,7 +160,7 @@ info(max_time  , #queue{max_time = T}   ) -> T;
 info(oldest_job, #queue{oldest_job = OJ}) -> OJ;
 info(length    , #queue{st = #st{table = Tab}}) ->
     ets:info(Tab, size).
-    
+
 -spec timedout(#queue{}) -> [] | {[entry()], #queue{}}.
 %% @spec timedout(#queue{}) -> [] | {[Entry], #queue{}}
 %% @doc Return all entries that have been in the queue longer than MaxTime.
@@ -219,7 +221,6 @@ set_oldest_job(#queue{st = #st{table = Tab}} = Q) ->
                  TS
          end,
     Q#queue{oldest_job = OJ}.
-            
 
 find_expired(Tab, Now, TO) ->
     find_expired(ets:last(Tab), Tab, Now, TO, [], undefined).
@@ -243,9 +244,4 @@ empty(#queue{st = #st{table = T}} = Q) ->
 
 is_expired(TS, Now, TO) ->
     MS = Now - TS,
-    MS > TO.
-
-	
-
-
-
+    MS div 1000 > TO.

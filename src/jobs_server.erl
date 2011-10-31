@@ -906,7 +906,7 @@ check_queue(#queue{} = Q, TS, S) ->
             {0, [], []};
         false ->
             %% non-empty queue
-	    do_check_queue(Q, TS, S)
+	    do_check_queue(timeout_jobs(TS, Q), TS, S)
     end.
 
 do_check_queue(#queue{regulators = Regs0} = Q, TS, S) ->
@@ -1296,21 +1296,33 @@ apply_active_modifiers(#rate{preset_limit = Preset,
     R#rate{limit = Limit,
 	   interval = interval(Limit)}.
 
-queue_job(TS, From, #queue{max_size = MaxSz} = Q, S) ->
+queue_job(TS, From, Q0, S) ->
+    #queue{max_size = MaxSz} = Q = timeout_jobs(TS, Q0),
     CurSz = q_info(length, Q),
     if CurSz >= MaxSz ->
-            case q_timedout(Q) of
-                [] ->
-                    reject(From);
-                {OldJobs, Q1} ->
-                    [timeout(J) || J <- OldJobs],
-                    %% update_queue(q_in(TS, From, Q1), S)
-                    perform_queue_check(q_in(TS, From, Q1), TS, S)
-            end;
+	    reject(From);
        true ->
             %% update_queue(q_in(TS, From, Q), S)
             perform_queue_check(q_in(TS, From, Q), TS, S)
     end.
+
+timeout_jobs(TS, #queue{max_time = MaxTime} = Q)
+  when is_integer(MaxTime) ->
+    Oldest = q_info(oldest_job, Q),
+    if is_integer(Oldest) andalso (TS - Oldest) div 1000 > MaxTime ->
+	    case q_timedout(Q) of
+		[] ->
+		    Q;
+		{OldJobs, Q1} ->
+                    [timeout(J) || {_,J} <- OldJobs],
+		    Q1
+	    end;
+       true ->
+	    Q
+    end;
+timeout_jobs(_, Q) ->
+    Q.
+
 
 do_enqueue(TS, Item, #queue{max_size = MaxSz} = Q, S) ->
     CurSz = q_info(length, Q),
@@ -1377,7 +1389,7 @@ q_delete  (#queue{mod = Mod} = Q)     -> Mod:delete  (Q).
 %q_is_empty(#queue{type = #producer{}}) -> false;
 q_is_empty(#queue{mod = Mod} = Q)       -> Mod:is_empty(Q).
 %%
-q_out     (infinity, #queue{mod = Mod} = Q)  -> Mod:all (Q);
+%q_out     (infinity, #queue{mod = Mod} = Q)  -> Mod:all (Q);
 q_out     (N , #queue{mod = Mod} = Q) -> Mod:out     (N, Q).
 q_info    (I , #queue{mod = Mod} = Q) -> Mod:info    (I, Q).
 %%
