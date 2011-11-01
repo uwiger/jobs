@@ -163,18 +163,19 @@ info(length    , #queue{st = #st{table = Tab}}) ->
 
 -spec timedout(#queue{}) -> [] | {[entry()], #queue{}}.
 %% @spec timedout(#queue{}) -> [] | {[Entry], #queue{}}
-%% @doc Return all entries that have been in the queue longer than MaxTime.
-%%
-%% NOTE: This is an inspection function; it doesn't remove the job entries.
+%% @doc Return and delete all entries that have been in the queue longer
+%% than MaxTime.
 %% @end
 %%
-timedout(#queue{max_time = undefined} = Q) -> {[], Q};
 timedout(#queue{max_time = TO} = Q) ->
     timedout(TO, Q).
 
-timedout(_ , #queue{oldest_job = undefined}) -> [];
-timedout(TO, #queue{st = #st{table = Tab}} = Q) ->
-    Now = timestamp(),
+timedout(_ , #queue{oldest_job = undefined} = Q) -> {[], Q};
+timedout(_, #queue{max_time = undefined} = Q) -> {[], Q};
+timedout(TO, Q) ->
+    timedout(TO, timestamp(), Q).
+
+timedout(TO, Now, #queue{st = #st{table = Tab}} = Q) ->
     {Objs, OJ} = find_expired(Tab, Now, TO),
     {Objs, Q#queue{oldest_job = OJ}}.
 

@@ -1300,7 +1300,8 @@ queue_job(TS, From, Q0, S) ->
     #queue{max_size = MaxSz} = Q = timeout_jobs(TS, Q0),
     CurSz = q_info(length, Q),
     if CurSz >= MaxSz ->
-	    reject(From);
+	    reject(From),
+	    update_queue(Q, S);
        true ->
             %% update_queue(q_in(TS, From, Q), S)
             perform_queue_check(q_in(TS, From, Q), TS, S)
@@ -1407,6 +1408,8 @@ q_in(TS, From, #queue{mod = Mod, oldest_job = OJ} = Q) ->
 next_time(_TS, #queue{oldest_job = undefined}) ->
     undefined;
 next_time(TS, #queue{latest_dispatch = TS1,
+		     oldest_job = OJ,
+		     max_time = MaxTime,
 		     check_interval = I0}) ->
     I = case I0 of
 	    _ when is_number(I0) -> I0;
@@ -1414,7 +1417,13 @@ next_time(TS, #queue{latest_dispatch = TS1,
 		M:F(TS, TS1, As)
 	end,
     Since = (TS - TS1) div 1000,
-    erlang:max(0, trunc(I - Since)).
+    T = erlang:max(0, trunc(I - Since)),
+    if is_integer(MaxTime) ->
+	    erlang:min(T, erlang:max(0, MaxTime - ( (TS - OJ) div 1000 )));
+       true ->
+	    T
+    end.
+
 
 
 %% Microsecond timestamp; never wraps
