@@ -67,8 +67,8 @@ subscriber_loop(Name) ->
 
 
 is_overload() ->
-    %% FIX THIS!!!!
-    case mnesia_overload_read() of
+    %% e.g: [{mnesia_tm,true},{mnesia_dump_log,false}]
+    case lists:keysearch(true, 2, mnesia_overload_read()) of
         [] ->
             false;
         _ ->
