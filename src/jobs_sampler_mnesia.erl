@@ -68,12 +68,7 @@ subscriber_loop(Name) ->
 
 is_overload() ->
     %% e.g: [{mnesia_tm,true},{mnesia_dump_log,false}]
-    case lists:keysearch(true, 2, mnesia_overload_read()) of
-        [] ->
-            false;
-        _ ->
-            true
-    end.
+    lists:keymember(true, 2, mnesia_overload_read()).
 
 mnesia_overload_read() ->
     %% This function is not present in mnesia versions older than R14A
