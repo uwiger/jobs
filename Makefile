@@ -1,9 +1,9 @@
 all:
-	@./rebar get-deps compile
+	rebar get-deps compile
 
 test: all
-	@./rebar eunit
+	rebar eunit
 
 clean:
-	@./rebar clean
+	rebar clean
 

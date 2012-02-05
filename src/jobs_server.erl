@@ -1104,6 +1104,9 @@ do_send_after(T, Msg) ->
 apply_modifiers(Modifiers, #queue{regulators = Rs} = Q) ->
     Rs1 = [apply_modifiers(Modifiers, R) || R <- Rs],
     Q#queue{regulators = Rs1};
+apply_modifiers(_, #counter{} = C) ->
+    %% this is just an alias to a counter; modifiers are applied to counters separately
+    C;
 apply_modifiers(Modifiers, Regulator) ->
     with_modifiers(Modifiers, Regulator, fun apply_damper/4).
 
