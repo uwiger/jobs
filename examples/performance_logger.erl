@@ -92,7 +92,7 @@ tick() ->
 
 %% Implementation
 -record(state, {data_spec, %% data spec, see description at the top of the file
-                start_time, %% FIXME I don't really remember what's that for? (probably for offsetting ETS data)
+                start_time, %% the time of the start of start_recording,it is used to calculate the offset from this start time, the offset is used to indicate the descending order of the ets table "pfl_stats" key
                 timer}). %% reference to timer that makes us take samples every now and then
 
 init(_State) ->
