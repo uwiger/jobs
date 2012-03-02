@@ -1,6 +1,6 @@
 DIALYZER=dialyzer
 
-.PHONY: all test clean plt analyze
+.PHONY: all test clean plt analyze doc
 
 all: deps compile
 
@@ -16,6 +16,9 @@ test: all
 clean:
 	rebar clean
 
+doc:
+	rebar doc
+
 plt: deps compile
 	$(DIALYZER) --build_plt --output_plt .jobs.plt \
 		-pa deps/*/ebin \
@@ -28,3 +31,4 @@ analyze: compile
 	$(DIALYZER) --no_check_plt \
 		     ebin \
 		--plt .jobs.plt
+
