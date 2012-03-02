@@ -1,0 +1,6 @@
+/deps/
+/deps/
+*.beam
+ebin/jobs.app
+
+/.jobs.plt
