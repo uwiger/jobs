@@ -36,11 +36,12 @@
          delete/1]).
 -export([in/3,
          out/2,
-	 peek/1,
+         peek/1,
          info/2,
          all/1,
          empty/1,
          is_empty/1,
+         representation/1,
          timedout/1, timedout/2]).
 
 -export([behaviour_info/1]).
@@ -84,6 +85,15 @@ new(Options, Q) ->
             Tab = ets:new(?MODULE, [ordered_set]),
             Q#queue{st = #st{table = Tab}}
     end.
+
+%% @doc A representation of a queue which can be inspected
+%% @end
+representation(
+  #queue { oldest_job = OJ,
+           st = #st { table = Tab}}) ->
+    Contents = ets:match_object(Tab, '$1'),
+    [{oldest_job, OJ},
+     {contents, Contents}].
 
 %% @spec delete(#queue{}) -> any()
 %% @doc Queue is being deleted; remove any external data structures.
