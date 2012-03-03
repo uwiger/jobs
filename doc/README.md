@@ -1,17 +1,18 @@
 
 
-<h1>The jobs application</h1>
-
-jobs - a Job scheduler for load regulation
-
-===========================================
+#jobs - a Job scheduler for load regulation#
 
 
-Jobs is a job scheduler for load regulation of Erlang applications.
-
-Copyright © 2010 Erlang Solutions Ltd.
+Copyright (c) 2010 Erlang Solutions Ltd.
 
 __Version:__ 0.1
+
+
+
+JOBS
+====
+
+
 
 Jobs is a job scheduler for load regulation of Erlang applications.
 It provides a queueing framework where each queue can be configured
@@ -20,8 +21,55 @@ Queues can be added and modified at runtime, and customizable
 "samplers" propagate load status across all nodes in the system.
 
 
-<h2 class="indextitle">Modules</h2>
 
+Specifically, jobs provides three features:
+
+
+
+* Job scheduling: A job is scheduled according to certain constraints.  
+For instance, you may want to define that no more than 9 jobs of a  
+certain type can execute simultaneously and the maximal rate at  
+which you can start such jobs are 300 per second.
+* Job queueing: When load is higher than the scheduling limits  
+additional jobs are *queued* by the system to be run later when load  
+clears. Certain rules govern queues: are they dequeued in FIFO or  
+LIFO order? How many jobs can the queue take before it is full? Is  
+there a deadline after which jobs should be rejected. When we hit  
+the queue limits we reject the job. This provides a feedback  
+mechanism on the client of the queue so you can take action.  
+* Sampling and dampening: Periodic samples of the Erlang VM can  
+provide information about the health of the system in general. If we  
+have high CPU load or high memory usage, we apply dampening to the  
+scheduling rules: we may lower the concurrency count or the rate at  
+which we execute jobs. When the health problem clears, we remove the  
+dampener and run at full speed again.
+
+
+
+Examples
+--------
+
+
+
+To be done
+
+
+
+Prerequisites
+-------------
+This application requires 'exprecs'.
+The 'exprecs' module is part of http://github.com/esl/parse_trans
+
+
+
+Contribute
+----------
+For issues, comments or feedback please [create an issue!] [1]
+
+[1]: http://github.com/esl/jobs/issues "jobs issues"
+
+
+##Modules##
 
 
 <table width="100%" border="0" summary="list of modules">

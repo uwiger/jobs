@@ -1,9 +1,6 @@
-Module jobs_queue
-=================
 
 
-<h1>Module jobs_queue</h1>
-
+#Module jobs_queue#
 * [Description](#description)
 * [Function Index](#index)
 * [Function Details](#functions)
@@ -17,62 +14,57 @@ __This module defines the `jobs_queue` behaviour.__
 <br></br>
  Required callback functions: `new/2`, `delete/1`, `in/3`, `peek/1`, `out/2`, `all/1`, `info/2`.
 
-__Authors:__ : Ulf Wiger ([`ulf.wiger@erlang-solutions.com`](mailto:ulf.wiger@erlang-solutions.com)).
+__Authors:__ : Ulf Wiger ([`ulf.wiger@erlang-solutions.com`](mailto:ulf.wiger@erlang-solutions.com)).<a name="description"></a>
 
-<h2><a name="description">Description</a></h2>
-
+##Description##
 
 
 This module implements the default queue behaviour for JOBS, and also
-specifies the behaviour itself.
+specifies the behaviour itself.<a name="index"></a>
 
-<h2><a name="index">Function Index</a></h2>
+##Function Index##
 
 
-
-<table width="100%" border="1" cellspacing="0" cellpadding="2" summary="function index"><tr><td valign="top"><a href="#all-1">all/1</a></td><td></td></tr><tr><td valign="top"><a href="#behaviour_info-1">behaviour_info/1</a></td><td></td></tr><tr><td valign="top"><a href="#delete-1">delete/1</a></td><td>Queue is being deleted; remove any external data structures.</td></tr><tr><td valign="top"><a href="#empty-1">empty/1</a></td><td></td></tr><tr><td valign="top"><a href="#in-3">in/3</a></td><td></td></tr><tr><td valign="top"><a href="#info-2">info/2</a></td><td></td></tr><tr><td valign="top"><a href="#is_empty-1">is_empty/1</a></td><td></td></tr><tr><td valign="top"><a href="#new-2">new/2</a></td><td>Instantiate a new queue.</td></tr><tr><td valign="top"><a href="#out-2">out/2</a></td><td></td></tr><tr><td valign="top"><a href="#peek-1">peek/1</a></td><td></td></tr><tr><td valign="top"><a href="#timedout-1">timedout/1</a></td><td></td></tr><tr><td valign="top"><a href="#timedout-2">timedout/2</a></td><td></td></tr></table>
+<table width="100%" border="1" cellspacing="0" cellpadding="2" summary="function index"><tr><td valign="top"><a href="#all-1">all/1</a></td><td>Return all the job entries in the queue, not removing them from the queue.</td></tr><tr><td valign="top"><a href="#behaviour_info-1">behaviour_info/1</a></td><td></td></tr><tr><td valign="top"><a href="#delete-1">delete/1</a></td><td>Queue is being deleted; remove any external data structures.</td></tr><tr><td valign="top"><a href="#empty-1">empty/1</a></td><td></td></tr><tr><td valign="top"><a href="#in-3">in/3</a></td><td>Enqueue a job reference; return the updated queue.</td></tr><tr><td valign="top"><a href="#info-2">info/2</a></td><td>Return information about the queue.</td></tr><tr><td valign="top"><a href="#is_empty-1">is_empty/1</a></td><td></td></tr><tr><td valign="top"><a href="#new-2">new/2</a></td><td>Instantiate a new queue.</td></tr><tr><td valign="top"><a href="#out-2">out/2</a></td><td>Dequeue a batch of N jobs; return the modified queue.</td></tr><tr><td valign="top"><a href="#peek-1">peek/1</a></td><td>Looks at the first item in the queue, without removing it.</td></tr><tr><td valign="top"><a href="#timedout-1">timedout/1</a></td><td>Return all entries that have been in the queue longer than MaxTime.</td></tr><tr><td valign="top"><a href="#timedout-2">timedout/2</a></td><td></td></tr></table>
 
 
 <a name="functions"></a>
 
-
-<h2>Function Details</h2>
-
+##Function Details##
 
 <a name="all-1"></a>
 
-
-<h3>all/1</h3>
-
+###all/1##
 
 
 
 
-`all(Queue) -> any()`
+<pre>all(Queue::#queue{}) -&gt; [JobEntry]</pre>
+<br></br>
 
 
+
+
+Return all the job entries in the queue, not removing them from the queue.
 <a name="behaviour_info-1"></a>
 
-
-<h3>behaviour_info/1</h3>
-
+###behaviour_info/1##
 
 
 
 
 `behaviour_info(X1) -> any()`
 
-
 <a name="delete-1"></a>
 
-
-<h3>delete/1</h3>
-
+###delete/1##
 
 
 
 
-<tt>delete(Queue::#queue{}) -> any()</tt>
+<pre>delete(Queue::#queue{}) -&gt; any()</pre>
+<br></br>
+
 
 
 
@@ -81,65 +73,71 @@ specifies the behaviour itself.
 Queue is being deleted; remove any external data structures.
 
 If the queue behaviour has created an ETS table or similar, this is the place
-to get rid of it.
-<a name="empty-1"></a>
+to get rid of it.<a name="empty-1"></a>
 
-
-<h3>empty/1</h3>
-
+###empty/1##
 
 
 
 
 `empty(Queue) -> any()`
 
-
 <a name="in-3"></a>
 
-
-<h3>in/3</h3>
-
+###in/3##
 
 
 
 
-`in(TS, Job, Queue) -> any()`
-
-
-<a name="info-2"></a>
-
-
-<h3>info/2</h3>
+<pre>in(TS::Timestamp, Job, Queue::#queue{}) -&gt; #queue{}</pre>
+<br></br>
 
 
 
 
 
-`info(X1, Queue) -> any()`
+
+Enqueue a job reference; return the updated queue.
+
+This puts a job into the queue. The callback function is responsible for
+updating the #queue.oldest_job attribute, if needed. The #queue.oldest_job
+attribute shall either contain the Timestamp of the oldest job in the queue,
+or `undefined` if the queue is empty. It may be noted that, especially in the
+fairly trivial case of the `in/3` function, the oldest job would be
+`erlang:min(Timestamp, PreviousOldest)`, even if `PreviousOldest == undefined`.<a name="info-2"></a>
+
+###info/2##
 
 
+
+
+<pre>info(X1::Item, Queue::#queue{}) -&gt; Info</pre>
+<ul class="definitions"><li><pre>Item = max_time | oldest_job | length</pre></li></ul>
+
+
+
+Return information about the queue.
 <a name="is_empty-1"></a>
 
-
-<h3>is_empty/1</h3>
-
+###is_empty/1##
 
 
 
 
-`is_empty(Queue) -> any()`
+<pre>is_empty(Queue::#queue{}) -&gt; boolean()</pre>
+<br></br>
 
 
 <a name="new-2"></a>
 
-
-<h3>new/2</h3>
-
+###new/2##
 
 
 
 
-<tt>new(Options, Q::#queue{}) -> #queue{}</tt>
+<pre>new(Options, Q::#queue{}) -&gt; #queue{}</pre>
+<br></br>
+
 
 
 
@@ -153,54 +151,61 @@ Q is an initial #queue{} record. It can be used directly by including
 module `jobs_info`.
 See [parse_trans](http://github.com/esl/parse_trans) for more info
 on exprecs. In the `new/2` function, the #queue.st attribute will normally be
-used to keep track of the queue data structure.
-<a name="out-2"></a>
+used to keep track of the queue data structure.<a name="out-2"></a>
 
-
-<h3>out/2</h3>
-
+###out/2##
 
 
 
 
-`out(N, Queue) -> any()`
-
-
-<a name="peek-1"></a>
-
-
-<h3>peek/1</h3>
+<pre>out(N::integer(), Queue::#queue{}) -&gt; {[Entry], #queue{}}</pre>
+<br></br>
 
 
 
 
 
-`peek(Queue) -> any()`
+
+Dequeue a batch of N jobs; return the modified queue.
+
+Note that this function may need to update the #queue.oldest_job attribute,
+especially if the queue becomes empty.<a name="peek-1"></a>
+
+###peek/1##
 
 
+
+
+<pre>peek(Queue::#queue{}) -&gt; JobEntry | undefined</pre>
+<br></br>
+
+
+
+
+Looks at the first item in the queue, without removing it.
 <a name="timedout-1"></a>
 
-
-<h3>timedout/1</h3>
-
+###timedout/1##
 
 
 
 
-`timedout(Queue) -> any()`
+<pre>timedout(Queue::#queue{}) -&gt; [] | {[Entry], #queue{}}</pre>
+<br></br>
 
 
-<a name="timedout-2"></a>
 
 
-<h3>timedout/2</h3>
 
+
+Return all entries that have been in the queue longer than MaxTime.
+
+NOTE: This is an inspection function; it doesn't remove the job entries.<a name="timedout-2"></a>
+
+###timedout/2##
 
 
 
 
 `timedout(TO, Queue) -> any()`
 
-
-
-_Generated by EDoc, Jan 22 2011, 00:39:21._
