@@ -40,7 +40,7 @@ g_model(N) ->
                   ?LET(M, g_model(max(0, N-2)),
                        frequency(
                          [
-                          %{300, {call, ?MODULE, advance_time, [M, nat()]}},
+                          {300, {call, ?MODULE, advance_time, [M, nat()]}},
                           {200, {call, ?MODULE, in, [jobs_queue, g_job(), M]}},
                           {100, {call, ?MODULE, out, [jobs_queue, nat(), M]}},
                           {1,   {call, ?MODULE, empty, [jobs_queue, M]}}

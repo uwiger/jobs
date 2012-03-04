@@ -25,9 +25,12 @@ peek(#queue { st = Q }) ->
 all(#queue { st = Q}) ->
     queue:to_list(Q).
 
-in(TS, E, #queue { st = Q} = S) ->
+in(TS, E, #queue { st = Q,
+                   oldest_job = OJ } = S) ->
     S#queue { st = queue:in({TS, E}, Q),
-              oldest_job = TS }.
+              oldest_job = case  OJ of undefined -> TS;
+                               _ -> OJ
+                           end}.
 
 out(N, #queue { st = Q} = S) ->
     {Elems, NQ} = out(N, Q, []),
