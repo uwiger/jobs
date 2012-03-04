@@ -132,9 +132,9 @@ in(TS, Job, #queue{st = #st{table = Tab}, oldest_job = OJ} = Q) ->
 peek(#queue{st = #st{table = T}}) ->
     case ets:first(T) of
 	'$end_of_table' ->
-	    undefined;
+            undefined;
 	Key ->
-	    Key
+            Key
     end.
 
 -spec out(N :: integer(), #queue{}) -> {[entry()], #queue{}}.

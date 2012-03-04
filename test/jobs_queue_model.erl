@@ -1,25 +1,33 @@
 -module(jobs_queue_model).
 
+-include("jobs.hrl").
+
 -compile(export_all).
 
--record(qm, { type = fifo,
-              oj   = undefined,
-              q    = queue:new() }).
-
 new(_Options, Q) ->
-    #qm{}.
+    Q#queue { st = queue:new() }.
 
-is_empty(#qm { q = Q}) ->
+is_empty(#queue { st = Q}) ->
     queue:is_empty(Q).
 
-in(TS, E, #qm { q = Q} = S) ->
-    S#qm { q = queue:in({TS, E}, Q),
-           oj = TS }.
+info(oldest_job, #queue { oldest_job = OJ}) ->
+    OJ;
+info(max_time, #queue { max_time = MT}) -> MT;
+info(length, #queue { st = Q}) ->
+    queue:len(Q).
 
-out(N, #qm { q = Q} = S) ->
-    {Elems, NQ} = out(N, Q, []),
-    S#qm { q = NQ,
-           oj = set_oldest_job(NQ) }.
+
+all(#queue { st = Q}) ->
+    queue:to_list(Q).
+
+in(TS, E, #queue { st = Q} = S) ->
+    S#queue { st = queue:in({TS, E}, Q),
+              oldest_job = TS }.
+
+out(N, #queue { st = Q} = S) ->
+    {_Elems, NQ} = out(N, Q, []),
+    S#queue { st = NQ,
+              oldest_job = set_oldest_job(NQ) }.
 
 set_oldest_job(Q) ->
     case queue:out(Q) of
@@ -39,7 +47,7 @@ out(K, Q, Acc) when K > 0 ->
             out(0, NQ, Acc)
     end.
 
-representation(#qm { q = Q, oj = OJ} ) ->
+representation(#queue { st = Q, oldest_job = OJ} ) ->
     Cts = queue:to_list(Q),
     [{oldest_job, OJ},
      {contents, Cts}];

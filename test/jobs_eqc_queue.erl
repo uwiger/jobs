@@ -14,12 +14,16 @@ g_scheduling_order() ->
 g_options() ->
     [g_scheduling_order()].
 
+g_queue_record() ->
+    ?LET(N, nat(),
+        #queue { max_time = N }).
+
 g_queue() ->
     ?SIZED(Size, g_queue(Size)).
 
 g_queue(0) ->
     oneof([{call, jobs_queue, new, [g_options(),
-                                    #queue{}]}]);
+                                    g_queue_record()]}]);
 g_queue(N) ->
     frequency([{1, g_queue(0)},
                {N,
@@ -34,9 +38,14 @@ g_queue(N) ->
 out(N, Q) ->
     element(2, jobs_queue:out(N, Q)).
 
+g_info() ->
+    oneof([oldest_job, length, max_time]).
+
 obs() ->
     Q = g_queue(),
-    oneof([{call, jobs_queue, is_empty, [Q]}]).
+    oneof([{call, jobs_queue, all, [Q]},
+           {call, jobs_queue, info, [g_info(), Q]},
+           {call, jobs_queue, is_empty, [Q]}]).
 
 model({call, _, F, Args}) ->
     apply(jobs_queue_model, F, model(Args));
