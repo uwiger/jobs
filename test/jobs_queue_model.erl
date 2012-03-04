@@ -30,9 +30,9 @@ in(TS, E, #queue { st = Q} = S) ->
               oldest_job = TS }.
 
 out(N, #queue { st = Q} = S) ->
-    {_Elems, NQ} = out(N, Q, []),
-    S#queue { st = NQ,
-              oldest_job = set_oldest_job(NQ) }.
+    {Elems, NQ} = out(N, Q, []),
+    {Elems, S#queue { st = NQ,
+                      oldest_job = set_oldest_job(NQ) }}.
 
 set_oldest_job(Q) ->
     case queue:out(Q) of
