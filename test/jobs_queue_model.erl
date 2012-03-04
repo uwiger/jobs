@@ -52,6 +52,10 @@ out(K, Q, Acc) when K > 0 ->
             out(0, NQ, Acc)
     end.
 
+empty(#queue {} = Q) ->
+    Q#queue { st = queue:new(),
+              oldest_job = undefined }.
+
 representation(#queue { st = Q, oldest_job = OJ} ) ->
     Cts = queue:to_list(Q),
     [{oldest_job, OJ},

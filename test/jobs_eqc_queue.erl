@@ -29,11 +29,12 @@ g_queue(N) ->
                {N,
                   ?LET(Q, g_queue(max(0, N-2)),
                        frequency(
-                         [{2, oneof(
-                                [{call, jobs_queue, in, [0,
-                                                         g_job(), Q]}])},
-                          {1, oneof(
-                               [{call, ?MODULE, out, [nat(), Q]}])}]))}]).
+                         [
+                          {200, {call, jobs_queue, in, [0, g_job(), Q]}},
+                          {100, {call, ?MODULE, out, [nat(), Q]}},
+                          {1,   {call, jobs_queue, empty, [Q]}}
+                         ]))}
+              ]).
 
 out(N, Q) ->
     element(2, jobs_queue:out(N, Q)).
