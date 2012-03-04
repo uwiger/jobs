@@ -15,7 +15,16 @@ in(TS, E, #qm { q = Q} = S) ->
 
 out(N, #qm { q = Q} = S) ->
     {Elems, NQ} = out(N, Q, []),
-    {Elems, S#qm { q = NQ}}.
+    S#qm { q = NQ,
+           oj = set_oldest_job(NQ) }.
+
+set_oldest_job(Q) ->
+    case queue:out(Q) of
+        {{value, {TS, _}}, _} ->
+            TS;
+        {empty, _} ->
+            undefined
+    end.
 
 out(0, Q, Taken) ->
     {lists:reverse(Taken), Q};

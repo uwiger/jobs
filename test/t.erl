@@ -3,4 +3,4 @@
 -compile(export_all).
 
 t() ->
-    eqc:module(jobs_eqc_queue).
+    eqc:module([{numtests, 1000}], jobs_eqc_queue).

@@ -29,7 +29,10 @@ g_queue(N) ->
                                 [{call, jobs_queue, in, [0,
                                                          g_job(), Q]}])},
                           {1, oneof(
-                               [{call, jobs_queue, out, [nat(), Q]}])}]))}]).
+                               [{call, ?MODULE, out, [nat(), Q]}])}]))}]).
+
+out(N, Q) ->
+    element(2, jobs_queue:out(N, Q)).
 
 obs() ->
     Q = g_queue(),
