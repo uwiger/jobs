@@ -16,6 +16,11 @@ info(max_time, #queue { max_time = MT}) -> MT;
 info(length, #queue { st = Q}) ->
     queue:len(Q).
 
+peek(#queue { st = Q }) ->
+    case queue:peek(Q) of
+        empty -> undefined;
+        {value, K} -> K
+    end.
 
 all(#queue { st = Q}) ->
     queue:to_list(Q).

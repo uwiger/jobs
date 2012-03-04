@@ -44,6 +44,7 @@ g_info() ->
 obs() ->
     Q = g_queue(),
     oneof([{call, jobs_queue, all, [Q]},
+           {call, jobs_queue, peek, [Q]},
            {call, jobs_queue, info, [g_info(), Q]},
            {call, jobs_queue, is_empty, [Q]}]).
 
