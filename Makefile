@@ -20,7 +20,8 @@ doc:
 	rebar doc
 
 test-console:
-	erl -pa deps/*/ebin ebin
+	erlc -I include -o test test/*.erl
+	erl -pa deps/*/ebin ebin test
 
 plt: deps compile
 	$(DIALYZER) --build_plt --output_plt .jobs.plt \

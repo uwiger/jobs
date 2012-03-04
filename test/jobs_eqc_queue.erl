@@ -35,7 +35,7 @@ obs() ->
     Q = g_queue(),
     oneof([{call, jobs_queue, is_empty, [Q]}]).
 
-model({call, F, Args}) ->
+model({call, _, F, Args}) ->
     apply(jobs_queue_model, F, model(Args));
 model([H|T]) ->
     [model(H) | model(T)];

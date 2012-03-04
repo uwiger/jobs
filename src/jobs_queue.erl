@@ -93,7 +93,7 @@ representation(
            st = #st { table = Tab}}) ->
     Contents = ets:match_object(Tab, '$1'),
     [{oldest_job, OJ},
-     {contents, Contents}].
+     {contents, [X || {X} <- Contents]}].
 
 %% @spec delete(#queue{}) -> any()
 %% @doc Queue is being deleted; remove any external data structures.

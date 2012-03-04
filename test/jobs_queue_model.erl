@@ -3,13 +3,15 @@
 -compile(export_all).
 
 -record(qm, { type = fifo,
+              oj   = undefined,
               q    = queue:new() }).
 
 new(_Options, Q) ->
     #qm{}.
 
-in(Timestamp, E, #qm { q = Q} = S) ->
-    S#qm { q = queue:in(E, Q)}.
+in(TS, E, #qm { q = Q} = S) ->
+    S#qm { q = queue:in({TS, E}, Q),
+           oj = TS }.
 
 out(N, #qm { q = Q} = S) ->
     {Elems, NQ} = out(N, Q, []),
@@ -24,5 +26,13 @@ out(K, Q, Acc) when K > 0 ->
         {empty, NQ} ->
             out(0, NQ, Acc)
     end.
+
+representation(#qm { q = Q, oj = OJ} ) ->
+    Cts = queue:to_list(Q),
+    [{oldest_job, OJ},
+     {contents, Cts}];
+representation(O) ->
+    io:format("Otherwise: ~p", [O]),
+    exit(fail).
 
 
