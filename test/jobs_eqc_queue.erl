@@ -55,6 +55,12 @@ prop_queue() ->
                                    model(Q))
                        end, q))).
 
+prop_observe() ->
+    ?FORALL(Obs, obs(),
+            equals(
+              catching(fun() -> eval(Obs) end, e),
+              catching(fun() -> model(Obs) end, m))).
+
 catching(F, T) ->
         try F()
         catch C:E ->

@@ -9,6 +9,9 @@
 new(_Options, Q) ->
     #qm{}.
 
+is_empty(#qm { q = Q}) ->
+    queue:is_empty(Q).
+
 in(TS, E, #qm { q = Q} = S) ->
     S#qm { q = queue:in({TS, E}, Q),
            oj = TS }.
