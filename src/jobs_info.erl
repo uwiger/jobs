@@ -20,7 +20,7 @@
 -include("jobs.hrl").
 -include_lib("parse_trans/include/exprecs.hrl").
 
--export_records([rr, cr, grp, rate, queue, sampler]).
+-export_records([rr, cr, grp, rate, queue, sampler, stateless, stateful]).
 
 
 pp(L) when is_list(L) ->

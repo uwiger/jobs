@@ -161,6 +161,8 @@
 		  hist_length = 10,
                   history = queue:new()}).
 
+-record(stateless, {f}).
+-record(stateful, {f, st}).
 
 %% Gproc counter objects for counter-based regulation
 %% Each worker process gets a counter object. The aggregated counter,

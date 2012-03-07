@@ -288,18 +288,29 @@ init(Opts) ->
                        N
                end,
     Default = get_value(default_queue, Opts, Default0),
-    {ok, set_info(
-	   kick_producers(
-	     lift_counters(S1#st{queues        = Queues,
-				 default_queue = Default,
-				 monitors = ets:new(monitors,[set])})))}.
+    S2 =  lift_counters(S1#st{queues        = Queues,
+			      default_queue = Default,
+			      monitors = ets:new(monitors,[set])}),
+    {ok, set_info(kick_producers(S2))}.
 
+init_producer(Type, Opts, Q) ->
+    {Mod, Args} =
+	case Type of
+	    F when is_function(F, 0); is_function(F, 2) ->
+		{jobs_prod_simple, F};
+	    {M,F,A} ->
+		{jobs_prod_simple, {M,F,A}};
+	    {M, A} when is_atom(M) ->
+		{M, A}
+	end,
+    ModS = Mod:init(Args, jobs_info:pp(Q)),
+    io:fwrite("ModS = ~p~n", [ModS]),
+    Q#queue{type = #producer{mod = Mod,
+			     state = ModS}}.
 
 
 init_queues(Qs, S) ->
-    lists:map(fun(Q) ->
-		      init_queue(Q,S)
-	      end, Qs).
+    [init_queue(Q, S) || Q <- Qs].
 
 init_queue({Name, standard_rate, R}, S) when is_integer(R), R > 0 ->
     init_queue({Name, [{regulators,
@@ -623,6 +634,7 @@ i_handle_call({set_modifiers, Modifiers}, _, #st{queues     = Qs,
 i_handle_call({add_queue, Name, Options}, _, #st{queues = Qs} = S) ->
     false = get_queue(Name, Qs),
     NewQueues = init_queues([{Name, Options}], S),
+    io:fwrite("NewQueues = ~p~n", [NewQueues]),
     {reply, ok, revisit_queue(
 		  Name, lift_counters(S#st{queues = Qs ++ NewQueues}))};
 i_handle_call({delete_queue, Name}, _, #st{queues = Qs} = S) ->
@@ -1095,7 +1107,7 @@ dispatch_N(N, Counters, TS, #queue{name = QName,
 				   type = #producer{mod = Mod,
 						    state = MS} = Prod} = Q,
 	   #st{monitors = Mons, info_f = I}) ->
-    {Jobs, MS1} = spawn_producers(N, Mod, MS, Counters, TS, I),
+    {Jobs, MS1} = spawn_producers(N, Mod, MS, Counters, I),
     monitor_jobs(Jobs, QName, Mons),
     Prod1 = Prod#producer{state = MS1},
     {N, Jobs, Q#queue{type = Prod1, approved = Approved0 + N}};
@@ -1127,13 +1139,14 @@ dispatch_jobs(Jobs, Counters, TS, Q, #st{monitors = Mons}) ->
     {Nd, Jobs, new_avg_out(Nd, Q#queue{latest_dispatch = TS,
 				       approved = Approved0 + Nd})}.
 
-spawn_producers(N, Mod, ModS, Counters, TS, I) ->
-    spawn_producers(N, Mod, ModS, [{counters, Counters}], TS, I, []).
+spawn_producers(N, Mod, ModS, Counters, I) ->
+    spawn_producers(N, Mod, ModS, [{counters, Counters}], I, []).
 
-spawn_producers(N, Mod, ModS, Opaque, TS, I, Acc) when N > 0 ->
-    {F, ModS1} = Mod:next(Opaque, TS, ModS, I),
-    spawn_producers(N-1, Mod, ModS1, Opaque, TS, I, [spawn_monitor(F) | Acc]);
-spawn_producers(_, _, ModS, _, _, _, Acc) ->
+spawn_producers(N, Mod, ModS, Opaque, I, Acc) when N > 0 ->
+    {F, ModS1} = Mod:next(Opaque, ModS, I),
+    spawn_producers(N-1, Mod, ModS1, Opaque, I,
+		    [spawn_monitor(F) | Acc]);
+spawn_producers(_, _, ModS, _, _, Acc) ->
     {Acc, ModS}.
 
 monitor_jobs(Jobs, QName, Mons) ->
@@ -1399,8 +1412,8 @@ q_new(Opts) ->
 		max_time = MaxTime,
 		max_size = MaxSize},
     case Type of
-	{producer, F} -> Q0#queue{type = #producer{mod = jobs_prod_simple,
-						   state = F}};
+	{producer, F} ->
+	    init_producer(F, Opts, Q0);
 	{action  , A} -> Q0#queue{type = #action  {a    = A}};
 	_ ->
 	    #queue{} = q_new(Opts, Q0, Mod)
@@ -1438,7 +1451,7 @@ q_in(TS, From, #queue{mod = Mod, oldest_job = OJ, queued = Qd} = Q) ->
 %%
 %% Calculate the delay (in ms) until queue is checked again.
 %%
-next_time(#queue{oldest_job = undefined}) ->
+next_time(#queue{type = fifo, oldest_job = undefined}) ->
     undefined;
 next_time(#queue{latest_dispatch = TL,
 		 check_interval = I0}) ->
@@ -1452,7 +1465,9 @@ next_time(#queue{latest_dispatch = TL,
 		    I1 when is_integer(I1) -> I1  % assertion
 		end
 	end,
-    erlang:max(0, I).
+    Res = erlang:max(0, I),
+    io:fwrite("next_time() -> ~p~n", [Res]),
+    Res.
 
 
 %% Microsecond timestamp; never wraps
