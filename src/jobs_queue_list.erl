@@ -32,6 +32,7 @@
 -export([in/3,
          out/2,
          info/2,
+         peek/1,
          all/1,
          empty/1,
          is_empty/1,
@@ -84,6 +85,8 @@ split(0, T, Acc) ->
     {lists:reverse(Acc), T}.
 
 
+peek(#queue{st = []})        -> undefined;
+peek(#queue { st = [H | _]}) -> H.
 
 
 -spec all(#queue{}) -> [entry()].

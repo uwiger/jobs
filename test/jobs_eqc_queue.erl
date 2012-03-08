@@ -26,24 +26,27 @@ g_start_time() ->
     ?LET({T, N}, {jobs_lib:timestamp(), nat()},
          T + N).
 
-g_model() ->
-    ?SIZED(Size, g_model(Size)).
+g_model_type() ->
+    oneof([jobs_queue, jobs_queue_list]).
 
-g_model(0) ->
-    oneof([{call, ?MODULE, new, [jobs_queue,
+g_model(Ty) ->
+    ?SIZED(Size, g_model(Size, Ty)).
+
+g_model(0, Ty) ->
+    oneof([{call, ?MODULE, new, [Ty,
                                  g_options(),
                                  g_queue_record(),
                                  g_start_time()]}]);
-g_model(N) ->
-    frequency([{1, g_model(0)},
+g_model(N, Ty) ->
+    frequency([{1, g_model(0, Ty)},
                {N,
-                  ?LET(M, g_model(max(0, N-2)),
+                  ?LET(M, g_model(max(0, N-2), Ty),
                        frequency(
                          [
                           {200, {call, ?MODULE, advance_time, [M, nat()]}},
-                          {200, {call, ?MODULE, in, [jobs_queue, g_job(), M]}},
-                          {100, {call, ?MODULE, out, [jobs_queue, nat(), M]}},
-                          {1,   {call, ?MODULE, empty, [jobs_queue, M]}}
+                          {200, {call, ?MODULE, in, [Ty, g_job(), M]}},
+                          {100, {call, ?MODULE, out, [Ty, nat(), M]}},
+                          {1,   {call, ?MODULE, empty, [Ty, M]}}
                          ]))}
               ]).
 
@@ -80,13 +83,17 @@ g_info() ->
     oneof([oldest_job, length, max_time]).
 
 obs() ->
-    M = g_model(),
-    oneof([{call, ?MODULE, all, [jobs_queue, M]},
-           {call, ?MODULE, peek, [jobs_queue, M]},
-           {call, ?MODULE, info, [jobs_queue, g_info(), M]},
-           {call, ?MODULE, is_empty, [jobs_queue, M]}]).
+    ?LET(Ty, g_model_type(),
+         begin
+             M = g_model(Ty),
+             oneof([{call, ?MODULE, all, [Ty, M]},
+                    {call, ?MODULE, peek, [Ty, M]},
+                    {call, ?MODULE, info, [Ty, g_info(), M]},
+                    {call, ?MODULE, is_empty, [Ty, M]}])
+         end).
 
-model({call, ?MODULE, F, [jobs_queue | Args]}) ->
+model({call, ?MODULE, F, [W | Args]}) when W == jobs_queue;
+                                           W == jobs_queue_list ->
     apply(?MODULE, F, model([jobs_queue_model | Args]));
 model({call, ?MODULE, F, Args}) ->
     apply(?MODULE, F, model(Args));
@@ -96,10 +103,11 @@ model(X) ->
     X.
 
 prop_oldest_job_match() ->
-    ?FORALL(M, g_model(),
+    ?LET(Ty, g_model_type(),
+         ?FORALL(M, g_model(Ty),
             begin
                 R = eval(M),
-                Repr = jobs_queue:representation(R#model.st),
+                Repr = Ty:representation(R#model.st),
                 OJ = proplists:get_value(oldest_job, Repr),
                 Cts = proplists:get_value(contents, Repr),
                 case OJ of
@@ -108,19 +116,20 @@ prop_oldest_job_match() ->
                     V ->
                         lists:min([TS || {TS, _} <- Cts]) == V
                 end
-            end).
+            end)).
 
 prop_queue() ->
-    ?FORALL(M, g_model(),
+    ?LET(Ty, g_model_type(),
+        ?FORALL(M, g_model(Ty),
             equals(
               catching(fun() ->
                                R = eval(M),
-                               jobs_queue:representation(R#model.st)
+                               Ty:representation(R#model.st)
                        end, e),
               catching(fun () ->
                                R = model(M),
                                jobs_queue_model:representation(R#model.st)
-                       end, q))).
+                       end, q)))).
 
 prop_observe() ->
     ?FORALL(Obs, obs(),
