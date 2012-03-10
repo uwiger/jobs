@@ -15,8 +15,8 @@ g_job() ->
 g_scheduling_order() ->
     elements([fifo, lifo]).
 
-g_options() ->
-    [g_scheduling_order()].
+g_options(jobs_queue) -> return([fifo]);
+g_options(jobs_queue_list) -> return([lifo]).
 
 g_queue_record() ->
     ?LET(N, nat(),
@@ -27,14 +27,14 @@ g_start_time() ->
          T + N).
 
 g_model_type() ->
-    oneof([jobs_queue, jobs_queue_list]).
+    oneof([jobs_queue]).
 
 g_model(Ty) ->
     ?SIZED(Size, g_model(Size, Ty)).
 
 g_model(0, Ty) ->
     oneof([{call, ?MODULE, new, [Ty,
-                                 g_options(),
+                                 g_options(Ty),
                                  g_queue_record(),
                                  g_start_time()]}]);
 g_model(N, Ty) ->

@@ -1,0 +1,5 @@
+* Change jobs_eqc_model so it understands LIFO and FIFO.
+* Change test so we always generate fifo with jobs queue
+* Change test so we always generate life with jobs queue list
+* Add tests for the "timedout" parameter.
+
