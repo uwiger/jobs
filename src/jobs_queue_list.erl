@@ -36,6 +36,7 @@
          all/1,
          empty/1,
          is_empty/1,
+         representation/1,
          timedout/1, timedout/2]).
 
 -include("jobs.hrl").
@@ -73,6 +74,10 @@ out(N, #queue{st = L, oldest_job = OJ} = Q) when N >= 0 ->
 	      _  -> OJ
 	  end,
     {Out, Q#queue{st = Rest, oldest_job = OJ1}}.
+
+representation(#queue { st = L, oldest_job = OJ}) ->
+    [{oldest_job, OJ},
+     {contents, L}].
 
 split(N, L) ->
     split(N, L, []).

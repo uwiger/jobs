@@ -59,7 +59,7 @@ set_oldest_job(fifo, Q) ->
             undefined
     end;
 set_oldest_job(lifo, Q) ->
-    case queue:out_r(Q) of
+    case queue:out(Q) of
         {{value, {TS, _}}, _} ->
             TS;
         {empty, _} ->
@@ -81,7 +81,7 @@ out(lifo, K, Q, Acc) ->
     case queue:out_r(Q) of
         {{value, E}, NQ} ->
             out(lifo, K-1, NQ, [E | Acc]);
-        {emtpy, NQ} ->
+        {empty, NQ} ->
             out(lifo, 0, NQ, Acc)
     end.
 
@@ -96,7 +96,7 @@ representation(#queue { type = fifo, st = Q, oldest_job = OJ} ) ->
      {contents, Cts}];
 representation(#queue { type = lifo, st = Q, oldest_job = OJ} ) ->
     Cts = queue:to_list(queue:reverse(Q)),
-    [{oldest_jobs, OJ},
+    [{oldest_job, OJ},
      {contents, Cts}];
 representation(O) ->
     io:format("Otherwise: ~p", [O]),

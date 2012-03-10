@@ -27,7 +27,7 @@ g_start_time() ->
          T + N).
 
 g_model_type() ->
-    oneof([jobs_queue]).
+    oneof([jobs_queue, jobs_queue_list]).
 
 g_model(Ty) ->
     ?SIZED(Size, g_model(Size, Ty)).
