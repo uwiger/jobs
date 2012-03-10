@@ -4,8 +4,15 @@
 
 -compile(export_all).
 
-new(_Options, Q) ->
-    Q#queue { st = queue:new() }.
+new(Options, Q) ->
+    case proplists:get_value(type, Options) of
+        fifo ->
+            Q#queue { type = fifo,
+                      st = queue:new() };
+        lifo ->
+            Q#queue { type = lifo,
+                      st = queue:new() }
+    end.
 
 is_empty(#queue { st = Q}) ->
     queue:is_empty(Q).
@@ -16,14 +23,21 @@ info(max_time, #queue { max_time = MT}) -> MT;
 info(length, #queue { st = Q}) ->
     queue:len(Q).
 
-peek(#queue { st = Q }) ->
+peek(#queue { type = fifo, st = Q }) ->
     case queue:peek(Q) of
+        empty -> undefined;
+        {value, K} -> K
+    end;
+peek(#queue { type = lifo, st = Q }) ->
+    case queue:peek_r(Q) of
         empty -> undefined;
         {value, K} -> K
     end.
 
-all(#queue { st = Q}) ->
-    queue:to_list(Q).
+all(#queue { type = fifo, st = Q}) ->
+    queue:to_list(Q);
+all(#queue { type = lifo, st = Q}) ->
+    queue:to_list(queue:reverse(Q)).
 
 in(TS, E, #queue { st = Q,
                    oldest_job = OJ } = S) ->
@@ -32,36 +46,57 @@ in(TS, E, #queue { st = Q,
                                _ -> OJ
                            end}.
 
-out(N, #queue { st = Q} = S) ->
-    {Elems, NQ} = out(N, Q, []),
+out(N, #queue { type = Ty, st = Q} = S) ->
+    {Elems, NQ} = out(Ty, N, Q, []),
     {Elems, S#queue { st = NQ,
-                      oldest_job = set_oldest_job(NQ) }}.
+                      oldest_job = set_oldest_job(Ty, NQ) }}.
 
-set_oldest_job(Q) ->
+set_oldest_job(fifo, Q) ->
     case queue:out(Q) of
+        {{value, {TS, _}}, _} ->
+            TS;
+        {empty, _} ->
+            undefined
+    end;
+set_oldest_job(lifo, Q) ->
+    case queue:out_r(Q) of
         {{value, {TS, _}}, _} ->
             TS;
         {empty, _} ->
             undefined
     end.
 
-out(0, Q, Taken) ->
+out(fifo, 0, Q, Taken) ->
     {lists:reverse(Taken), Q};
-out(K, Q, Acc) when K > 0 ->
+out(lifo, 0, Q, Taken) ->
+    {Taken, Q};
+out(fifo, K, Q, Acc) when K > 0 ->
     case queue:out(Q) of
         {{value, E}, NQ} ->
-            out(K-1, NQ, [E | Acc]);
+            out(fifo, K-1, NQ, [E | Acc]);
         {empty, NQ} ->
-            out(0, NQ, Acc)
+            out(fifo, 0, NQ, Acc)
+    end;
+out(lifo, K, Q, Acc) ->
+    case queue:out_r(Q) of
+        {{value, E}, NQ} ->
+            out(lifo, K-1, NQ, [E | Acc]);
+        {emtpy, NQ} ->
+            out(lifo, 0, NQ, Acc)
     end.
+
 
 empty(#queue {} = Q) ->
     Q#queue { st = queue:new(),
               oldest_job = undefined }.
 
-representation(#queue { st = Q, oldest_job = OJ} ) ->
+representation(#queue { type = fifo, st = Q, oldest_job = OJ} ) ->
     Cts = queue:to_list(Q),
     [{oldest_job, OJ},
+     {contents, Cts}];
+representation(#queue { type = lifo, st = Q, oldest_job = OJ} ) ->
+    Cts = queue:to_list(queue:reverse(Q)),
+    [{oldest_jobs, OJ},
      {contents, Cts}];
 representation(O) ->
     io:format("Otherwise: ~p", [O]),

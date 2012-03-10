@@ -15,8 +15,8 @@ g_job() ->
 g_scheduling_order() ->
     elements([fifo, lifo]).
 
-g_options(jobs_queue) -> return([fifo]);
-g_options(jobs_queue_list) -> return([lifo]).
+g_options(jobs_queue) -> return([{type, fifo}]);
+g_options(jobs_queue_list) -> return([{type, lifo}]).
 
 g_queue_record() ->
     ?LET(N, nat(),
