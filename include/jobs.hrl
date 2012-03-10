@@ -101,7 +101,7 @@
 
 -record(queue, {name                 :: any(),
 		mod                  :: atom(),
-		type = fifo          :: fifo | #producer{} | #passive{}
+		type = fifo          :: fifo | lifo | #producer{} | #passive{}
 				      | #action{},
 		group                :: atom(),
 		regulators  = []     :: [regulator() | regulator_ref()],
