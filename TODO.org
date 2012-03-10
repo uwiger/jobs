@@ -1,5 +1,8 @@
-* Change jobs_eqc_model so it understands LIFO and FIFO.
-* Change test so we always generate fifo with jobs queue
-* Change test so we always generate life with jobs queue list
-* Add tests for the "timedout" parameter.
+* DONE Change jobs_eqc_model so it understands LIFO and FIFO.
+* DONE Change test so we always generate fifo with jobs queue
+* DONE Change test so we always generate life with jobs queue list
+* TODO Add tests for the "timedout" parameter.
+** DONE Implement timedout in the model
+** TODO Introduce meck
+** TODO Meck up jobs_lib:timestamp()
 
