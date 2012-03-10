@@ -46,6 +46,7 @@ g_model(N, Ty) ->
                           {200, {call, ?MODULE, advance_time, [M, nat()]}},
                           {200, {call, ?MODULE, in, [Ty, g_job(), M]}},
                           {100, {call, ?MODULE, out, [Ty, nat(), M]}},
+%%                          {20,  {call, ?MODULE, timedout, [Ty, M]}},
                           {1,   {call, ?MODULE, empty, [Ty, M]}}
                          ]))}
               ]).
@@ -56,6 +57,14 @@ new(Mod, Opts, Q, T) ->
 
 advance_time(#model { time = T} = M, N) ->
     M#model { time = T + N}.
+
+timedout(Mod, #model { st = Q} = M) ->
+    {_, NQ} = Mod:timedout(Q),
+    M#model { st = NQ }.
+
+timedout_obs(Mod, #model { st = Q}) ->
+    {TO, _} = Mod:timedout(Q),
+    TO.
 
 in(Mod, Job, #model { time = T, st = Q} = M) ->
     M#model { st = Mod:in(T, Job, Q)}.
@@ -89,6 +98,7 @@ obs() ->
              oneof([{call, ?MODULE, all, [Ty, M]},
                     {call, ?MODULE, peek, [Ty, M]},
                     {call, ?MODULE, info, [Ty, g_info(), M]},
+%%                    {call, ?MODULE, timedout_obs, [Ty, M]},
                     {call, ?MODULE, is_empty, [Ty, M]}])
          end).
 

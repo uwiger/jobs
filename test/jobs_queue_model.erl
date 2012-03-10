@@ -23,6 +23,26 @@ info(max_time, #queue { max_time = MT}) -> MT;
 info(length, #queue { st = Q}) ->
     queue:len(Q).
 
+timedout(#queue { max_time = undefined} = Q) ->
+    {[], Q};
+timedout(#queue { max_time = TO, st = Queue} = Q) ->
+    Now = jobs_lib:timestamp(),
+    QL = queue:to_list(Queue),
+    {Left, Timedout} = lists:splitwith(
+                         fun({TS, _}) ->
+                                 not(is_expired(TS, Now, TO))
+                         end, QL),
+    OJ = get_oldest_job(Left),
+    {Timedout, Q#queue { oldest_job = OJ,
+                         st = queue:from_list(Left)}}.
+
+is_expired(TS, Now, TO) ->
+    (Now - TS) > TO.
+
+get_oldest_job([]) -> undefined;
+get_oldest_job(L) ->
+    element(1, hd(lists:reverse(L))).
+
 peek(#queue { type = fifo, st = Q }) ->
     case queue:peek(Q) of
         empty -> undefined;
