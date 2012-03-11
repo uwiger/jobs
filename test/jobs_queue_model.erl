@@ -24,7 +24,8 @@ info(length, #queue { st = Q}) ->
     queue:len(Q).
 
 timedout(#queue { max_time = undefined} = Q) ->
-    {[], Q};
+    %% This return value is highly illogical, but it is what the code returns!
+    [];
 timedout(#queue { max_time = TO, st = Queue} = Q) ->
     Now = jobs_lib:timestamp(),
     QL = queue:to_list(Queue),

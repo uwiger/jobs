@@ -9,6 +9,14 @@
         { time = jobs_lib:timestamp(),
           st   = undefined }).
 
+test() ->
+    test(300).
+
+test(N) ->
+    meck:new(jobs_lib, [passthrough]),
+    eqc:module({numtests, N}, ?MODULE),
+    meck:unload(jobs_lib).
+
 g_job() ->
     {make_ref(), make_ref()}.
 
@@ -25,6 +33,9 @@ g_queue_record() ->
 g_start_time() ->
     ?LET({T, N}, {jobs_lib:timestamp(), nat()},
          T + N).
+
+g_time_advance() ->
+    ?LET(N, nat(), N+1).
 
 g_model_type() ->
     oneof([jobs_queue, jobs_queue_list]).
@@ -43,38 +54,54 @@ g_model(N, Ty) ->
                   ?LET(M, g_model(max(0, N-2), Ty),
                        frequency(
                          [
-                          {200, {call, ?MODULE, advance_time, [M, nat()]}},
+                          {200, {call, ?MODULE, advance_time,
+                                 [M, g_time_advance()]}},
                           {200, {call, ?MODULE, in, [Ty, g_job(), M]}},
                           {100, {call, ?MODULE, out, [Ty, nat(), M]}},
-%%                          {20,  {call, ?MODULE, timedout, [Ty, M]}},
+                          %%{20,  {call, ?MODULE, timedout, [Ty, M]}},
                           {1,   {call, ?MODULE, empty, [Ty, M]}}
                          ]))}
               ]).
 
 new(Mod, Opts, Q, T) ->
-    #model { st = Mod:new(Opts, Q),
-             time = T}.
+    advance_time(
+      #model { st = Mod:new(Opts, Q),
+               time = T}, 1).
 
 advance_time(#model { time = T} = M, N) ->
     M#model { time = T + N}.
 
 timedout(Mod, #model { st = Q} = M) ->
-    {_, NQ} = Mod:timedout(Q),
-    M#model { st = NQ }.
+    set_time(M),
+    NQ = case Mod:timedout(Q) of
+             [] -> Q;
+             {_, Q1} -> Q1
+         end,
+    advance_time(M#model { st = NQ }, 1).
 
-timedout_obs(Mod, #model { st = Q}) ->
-    {TO, _} = Mod:timedout(Q),
-    TO.
+timedout_obs(Mod, #model { st = Q} = M) ->
+    set_time(M),
+    case Mod:timedout(Q) of
+        [] -> [];
+        {TO, _} -> TO
+    end.
 
 in(Mod, Job, #model { time = T, st = Q} = M) ->
-    M#model { st = Mod:in(T, Job, Q)}.
+    set_time(M),
+    advance_time(
+      M#model { st = Mod:in(T, Job, Q)},
+      1).
 
 out(Mod, N, #model { st = Q} = M) ->
+    set_time(M),
     NQ = element(2, Mod:out(N, Q)),
-    M#model { st = NQ }.
+    advance_time(
+      M#model { st = NQ },
+      1).
 
 empty(Mod, #model { st = Q} = M) ->
-    M#model { st = Mod:empty(Q)}.
+    set_time(M),
+    advance_time(M#model { st = Mod:empty(Q)}, 1).
 
 is_empty(M, #model { st = Q}) ->
     M:is_empty(Q).
@@ -154,3 +181,5 @@ catching(F, T) ->
                 T
         end.
 
+set_time(#model { time = T}) ->
+    meck:expect(jobs_lib, timestamp, fun() -> T end).
