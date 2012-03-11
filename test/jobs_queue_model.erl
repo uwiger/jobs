@@ -23,26 +23,31 @@ info(max_time, #queue { max_time = MT}) -> MT;
 info(length, #queue { st = Q}) ->
     queue:len(Q).
 
-timedout(#queue { max_time = undefined} = Q) ->
+timedout(#queue { max_time = undefined}) ->
     %% This return value is highly illogical, but it is what the code returns!
     [];
-timedout(#queue { max_time = TO, st = Queue} = Q) ->
+timedout(#queue { type = Ty,
+                  max_time = TO, st = Queue} = Q) ->
     Now = jobs_lib:timestamp(),
     QL = queue:to_list(Queue),
-    {Left, Timedout} = lists:splitwith(
+    {Left, Timedout} = lists:partition(
                          fun({TS, _}) ->
                                  not(is_expired(TS, Now, TO))
                          end, QL),
     OJ = get_oldest_job(Left),
-    {Timedout, Q#queue { oldest_job = OJ,
-                         st = queue:from_list(Left)}}.
+    {case Ty of
+         fifo -> Timedout;
+         lifo -> lists:reverse(Timedout)
+     end, Q#queue { oldest_job = OJ,
+                    st = queue:from_list(Left)}}.
 
 is_expired(TS, Now, TO) ->
-    (Now - TS) > TO.
+    MS = Now - TS,
+    MS > TO.
 
 get_oldest_job([]) -> undefined;
 get_oldest_job(L) ->
-    element(1, hd(lists:reverse(L))).
+    lists:min([TS || {TS, _} <- L]).
 
 peek(#queue { type = fifo, st = Q }) ->
     case queue:peek(Q) of

@@ -40,7 +40,6 @@
          timedout/1, timedout/2]).
 
 -include("jobs.hrl").
--import(jobs_lib, [timestamp/0]).
 
 %-type timestamp() :: integer().
 -type job()       :: {pid(), reference()}.
@@ -123,10 +122,10 @@ timedout(#queue{max_time = TO} = Q) ->
 
 timedout(_ , #queue{oldest_job = undefined}) -> [];
 timedout(TO, #queue{st = L} = Q) ->
-    Now = timestamp(),
+    Now = jobs_lib:timestamp(),
     {Left, Timedout} = lists:splitwith(fun({TS,_}) ->
-					       not(is_expired(TS,Now,TO)) 
-				       end, L),
+                                               not(is_expired(TS,Now,TO)) 
+                                       end, L),
     OJ = get_oldest_job(Left),
     {Timedout, Q#queue{oldest_job = OJ, st = Left}}.
 

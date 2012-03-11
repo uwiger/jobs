@@ -3,4 +3,7 @@
 -compile(export_all).
 
 t() ->
-    jobs_eqc_queue:test().
+    t(300).
+
+t(N) ->
+    jobs_eqc_queue:test(N).
