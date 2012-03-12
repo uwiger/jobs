@@ -38,7 +38,7 @@ g_time_advance() ->
     ?LET(N, nat(), N+1).
 
 g_model_type() ->
-    oneof([jobs_queue_list]).
+    oneof([jobs_queue_list, jobs_queue]).
 
 g_model(Ty) ->
     ?SIZED(Size, g_model(Size, Ty)).
@@ -57,8 +57,8 @@ g_model(N, Ty) ->
                           {200, {call, ?MODULE, advance_time,
                                  [M, g_time_advance()]}},
                           {200, {call, ?MODULE, in, [Ty, g_job(), M]}},
-                          {100, {call, ?MODULE, out, [Ty, nat(), M]}},
-                          {20,  {call, ?MODULE, timedout, [Ty, M]}},
+                          {100, {call, ?MODULE, out, [Ty, choose(0,100), M]}},
+%%                          {20,  {call, ?MODULE, timedout, [Ty, M]}},
                           {1,   {call, ?MODULE, empty, [Ty, M]}}
                          ]))}
               ]).
