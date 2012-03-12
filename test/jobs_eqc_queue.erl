@@ -58,7 +58,7 @@ g_model(N, Ty) ->
                                  [M, g_time_advance()]}},
                           {200, {call, ?MODULE, in, [Ty, g_job(), M]}},
                           {100, {call, ?MODULE, out, [Ty, choose(0,100), M]}},
-%%                          {20,  {call, ?MODULE, timedout, [Ty, M]}},
+                          {20,  {call, ?MODULE, timedout, [Ty, M]}},
                           {1,   {call, ?MODULE, empty, [Ty, M]}}
                          ]))}
               ]).
