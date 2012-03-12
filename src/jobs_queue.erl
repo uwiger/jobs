@@ -183,7 +183,11 @@ timedout(#queue{max_time = TO} = Q) ->
 timedout(_ , #queue{oldest_job = undefined}) -> [];
 timedout(TO, #queue{st = #st{table = Tab}} = Q) ->
     Now = timestamp(),
-    {Objs, OJ} = find_expired(Tab, Now, TO),
+    Objs = find_expired(Tab, Now, TO),
+    OJ = case ets:first(Tab) of
+             '$end_of_table' -> undefined;
+             {TS, _} -> TS
+         end,
     {Objs, Q#queue{oldest_job = OJ}}.
 
 
@@ -232,18 +236,18 @@ set_oldest_job(#queue{st = #st{table = Tab}} = Q) ->
             
 
 find_expired(Tab, Now, TO) ->
-    find_expired(ets:first(Tab), Tab, Now, TO, [], undefined).
+    find_expired(ets:first(Tab), Tab, Now, TO, []).
 
 %% we return the reversed list, but I don't think that matters here.
-find_expired('$end_of_table', _, _, _, Acc, OJ) ->
-    {Acc, OJ};
-find_expired({TS, _} = Key, Tab, Now, TO, Acc, _OJ) ->
+find_expired('$end_of_table', _, _, _, Acc) ->
+    Acc;
+find_expired({TS, _} = Key, Tab, Now, TO, Acc) ->
     case is_expired(TS, Now, TO) of
 	true ->
             ets:delete(Tab, Key),
-            find_expired(ets:first(Tab), Tab, Now, TO, [Key|Acc], TS);
+            find_expired(ets:first(Tab), Tab, Now, TO, [Key|Acc]);
 	false ->
-            {Acc, TS}
+            Acc
     end.
 
 empty(#queue{st = #st{table = T}} = Q) ->
