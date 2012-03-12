@@ -83,7 +83,7 @@ timedout_obs(Mod, #model { st = Q} = M) ->
     set_time(M),
     case Mod:timedout(Q) of
         [] -> [];
-        {TO, _} -> TO
+        {TO, _} -> lists:sort(TO)
     end.
 
 in(Mod, Job, #model { time = T, st = Q} = M) ->
@@ -162,23 +162,22 @@ prop_queue() ->
               catching(fun() ->
                                R = eval(M),
                                Ty:representation(R#model.st)
-                       end, e),
+                       end),
               catching(fun () ->
                                R = model(M),
                                jobs_queue_model:representation(R#model.st)
-                       end, q)))).
+                       end)))).
 
 prop_observe() ->
     ?FORALL(Obs, obs(),
             equals(
-              catching(fun() -> eval(Obs) end, e),
-              catching(fun() -> model(Obs) end, m))).
+              catch eval(Obs),
+              catch model(Obs))).
 
-catching(F, T) ->
+catching(F) ->
         try F()
         catch C:E ->
-                io:format("Exception: ~p:~p~n", [C, E]),
-                T
+                {exception, C, E}
         end.
 
 set_time(#model { time = T}) ->
