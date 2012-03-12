@@ -232,7 +232,7 @@ set_oldest_job(#queue{st = #st{table = Tab}} = Q) ->
             
 
 find_expired(Tab, Now, TO) ->
-    find_expired(ets:last(Tab), Tab, Now, TO, [], undefined).
+    find_expired(ets:first(Tab), Tab, Now, TO, [], undefined).
 
 %% we return the reversed list, but I don't think that matters here.
 find_expired('$end_of_table', _, _, _, Acc, OJ) ->
@@ -240,10 +240,10 @@ find_expired('$end_of_table', _, _, _, Acc, OJ) ->
 find_expired({TS, _} = Key, Tab, Now, TO, Acc, _OJ) ->
     case is_expired(TS, Now, TO) of
 	true ->
-	    ets:delete(Tab, Key),
-	    find_expired(ets:last(Tab), Tab, Now, TO, [Key|Acc], TS);
+            ets:delete(Tab, Key),
+            find_expired(ets:first(Tab), Tab, Now, TO, [Key|Acc], TS);
 	false ->
-	    {Acc, TS}
+            {Acc, TS}
     end.
 
 empty(#queue{st = #st{table = T}} = Q) ->
