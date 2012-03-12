@@ -1,6 +1,6 @@
 DIALYZER=dialyzer
 
-.PHONY: all test clean plt analyze doc
+.PHONY: all test clean plt analyze doc test-console
 
 all: deps compile
 
@@ -18,6 +18,10 @@ clean:
 
 doc:
 	rebar doc
+
+test-console:
+	erlc -I include -o test test/*.erl
+	erl -pa deps/*/ebin ebin test
 
 plt: deps compile
 	$(DIALYZER) --build_plt --output_plt .jobs.plt \

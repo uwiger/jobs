@@ -36,11 +36,12 @@
          delete/1]).
 -export([in/3,
          out/2,
-	 peek/1,
+         peek/1,
          info/2,
          all/1,
          empty/1,
          is_empty/1,
+         representation/1,
          timedout/1, timedout/2]).
 
 -export([behaviour_info/1]).
@@ -85,6 +86,15 @@ new(Options, Q) ->
             Q#queue{st = #st{table = Tab}}
     end.
 
+%% @doc A representation of a queue which can be inspected
+%% @end
+representation(
+  #queue { oldest_job = OJ,
+           st = #st { table = Tab}}) ->
+    Contents = ets:match_object(Tab, '$1'),
+    [{oldest_job, OJ},
+     {contents, [X || {X} <- Contents]}].
+
 %% @spec delete(#queue{}) -> any()
 %% @doc Queue is being deleted; remove any external data structures.
 %%
@@ -122,9 +132,9 @@ in(TS, Job, #queue{st = #st{table = Tab}, oldest_job = OJ} = Q) ->
 peek(#queue{st = #st{table = T}}) ->
     case ets:first(T) of
 	'$end_of_table' ->
-	    undefined;
+            undefined;
 	Key ->
-	    Key
+            Key
     end.
 
 -spec out(N :: integer(), #queue{}) -> {[entry()], #queue{}}.
@@ -173,7 +183,11 @@ timedout(#queue{max_time = TO} = Q) ->
 timedout(_ , #queue{oldest_job = undefined}) -> [];
 timedout(TO, #queue{st = #st{table = Tab}} = Q) ->
     Now = timestamp(),
-    {Objs, OJ} = find_expired(Tab, Now, TO),
+    Objs = find_expired(Tab, Now, TO),
+    OJ = case ets:first(Tab) of
+             '$end_of_table' -> undefined;
+             {TS, _} -> TS
+         end,
     {Objs, Q#queue{oldest_job = OJ}}.
 
 
@@ -222,18 +236,18 @@ set_oldest_job(#queue{st = #st{table = Tab}} = Q) ->
             
 
 find_expired(Tab, Now, TO) ->
-    find_expired(ets:last(Tab), Tab, Now, TO, [], undefined).
+    find_expired(ets:first(Tab), Tab, Now, TO, []).
 
 %% we return the reversed list, but I don't think that matters here.
-find_expired('$end_of_table', _, _, _, Acc, OJ) ->
-    {Acc, OJ};
-find_expired({TS, _} = Key, Tab, Now, TO, Acc, _OJ) ->
+find_expired('$end_of_table', _, _, _, Acc) ->
+    Acc;
+find_expired({TS, _} = Key, Tab, Now, TO, Acc) ->
     case is_expired(TS, Now, TO) of
 	true ->
-	    ets:delete(Tab, Key),
-	    find_expired(ets:last(Tab), Tab, Now, TO, [Key|Acc], TS);
+            ets:delete(Tab, Key),
+            find_expired(ets:first(Tab), Tab, Now, TO, [Key|Acc]);
 	false ->
-	    {Acc, TS}
+            Acc
     end.
 
 empty(#queue{st = #st{table = T}} = Q) ->

@@ -32,13 +32,14 @@
 -export([in/3,
          out/2,
          info/2,
+         peek/1,
          all/1,
          empty/1,
          is_empty/1,
+         representation/1,
          timedout/1, timedout/2]).
 
 -include("jobs.hrl").
--import(jobs_lib, [timestamp/0]).
 
 %-type timestamp() :: integer().
 -type job()       :: {pid(), reference()}.
@@ -73,6 +74,10 @@ out(N, #queue{st = L, oldest_job = OJ} = Q) when N >= 0 ->
 	  end,
     {Out, Q#queue{st = Rest, oldest_job = OJ1}}.
 
+representation(#queue { st = L, oldest_job = OJ}) ->
+    [{oldest_job, OJ},
+     {contents, L}].
+
 split(N, L) ->
     split(N, L, []).
 
@@ -84,6 +89,8 @@ split(0, T, Acc) ->
     {lists:reverse(Acc), T}.
 
 
+peek(#queue{st = []})        -> undefined;
+peek(#queue { st = [H | _]}) -> H.
 
 
 -spec all(#queue{}) -> [entry()].
@@ -115,10 +122,10 @@ timedout(#queue{max_time = TO} = Q) ->
 
 timedout(_ , #queue{oldest_job = undefined}) -> [];
 timedout(TO, #queue{st = L} = Q) ->
-    Now = timestamp(),
+    Now = jobs_lib:timestamp(),
     {Left, Timedout} = lists:splitwith(fun({TS,_}) ->
-					       not(is_expired(TS,Now,TO)) 
-				       end, L),
+                                               not(is_expired(TS,Now,TO)) 
+                                       end, L),
     OJ = get_oldest_job(Left),
     {Timedout, Q#queue{oldest_job = OJ, st = Left}}.
 
