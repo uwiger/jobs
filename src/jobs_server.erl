@@ -1310,9 +1310,9 @@ q_delete  (#queue{mod = Mod} = Q)     -> Mod:delete  (Q).
 %q_is_empty(#queue{type = #producer{}}) -> false;
 q_is_empty(#queue{mod = Mod} = Q)       -> Mod:is_empty(Q).
 %%
-q_out     (infinity, #queue{mod = Mod} = Q)  -> Mod:all (Q);
-q_out     (N , #queue{mod = Mod} = Q) -> Mod:out     (N, Q).
-q_info    (I , #queue{mod = Mod} = Q) -> Mod:info    (I, Q).
+q_out(infinity, #queue{mod = Mod} = Q) -> Mod:out(q_info(length, Q), Q);
+q_out      (N , #queue{mod = Mod} = Q) -> Mod:out     (N, Q).
+q_info     (I , #queue{mod = Mod} = Q) -> Mod:info    (I, Q).
 %%
 q_in(TS, From, #queue{mod = Mod, oldest_job = OJ} = Q) ->
     OJ1 = erlang:min(TS, OJ),    % Works even if OJ==undefined
