@@ -317,11 +317,25 @@ init_queue({Name, Action}, _S) when Action==approve; Action==reject ->
     #queue{name = Name, type = {action, Action}};
 init_queue({Name, producer, F, Opts}, S) ->
     init_queue({Name, [{type, {producer, F}} | Opts]}, S);
-init_queue({Name, Opts}, S) when is_list(Opts) ->
+init_queue({Name, Opts0}, S) when is_list(Opts0) ->
+    %% Allow the regulators to be named at the top-level.
+    %% This makes it possible to write {q, [{counter, [{limit,1}]}]},
+    %% instead of {q, [{regulators, [{counter, [{limit,1}]}]}]}.
+    {Regs0, Opts} = lists:foldr(
+		       fun(X, {R,O}) when is_tuple(X) ->
+			       case lists:member(
+				      element(1,X), [counter, rate,
+						     named_counter,
+						     group_rate]) of
+				   true  -> {[X|R], O};
+				   false -> {R, [X|O]}
+			       end;
+			  (X, {R, O}) -> {R, [X|O]}
+		       end, {[], []}, Opts0),
     [ChkI, Regs] =
         [get_value(K,Opts,D) ||
             {K, D} <- [{check_interval,undefined},
-                       {regulators, []}]],
+                       {regulators, Regs0}]],
     Q0 = q_new([{name,Name}|Opts]),
     Q1 = init_regulators(Regs, Q0#queue{check_interval = ChkI}),
     calculate_check_interval(Q1, S).
@@ -833,12 +847,17 @@ do_modify_counter_regulator(Name, Opts, #queue{regulators = Regs} = Q) ->
             badarg
     end.
 
-job_queued(#queue{check_counter = Ctr} = Q, TS, S) ->
+job_queued(#queue{check_counter = Ctr} = Q, PrevSz, TS, S) ->
     case Ctr + 1 of
 	C when C > 10 ->
 	    perform_queue_check(Q, TS, S);
 	C ->
-	    update_queue(Q#queue{check_counter = C}, S)
+	    Q1 = Q#queue{check_counter = C},
+	    if PrevSz == 0 ->
+		    perform_queue_check(Q1, TS, S);
+	       true ->
+		    update_queue(Q#queue{check_counter = C}, S)
+	    end
     end.
 
 perform_queue_check(Q, TS, S) ->
@@ -945,7 +964,12 @@ update_regulators(Regs, Q0, S0) ->
 			      {integer(), [any()]}.
 %%
 check_regulators(Regs, TS, #queue{latest_dispatch = TL}) ->
-    check_regulators(Regs, TS, TL, infinity, []).
+    case check_regulators(Regs, TS, TL, undefined, []) of
+	{undefined, _} ->
+	    {0, []};
+	Other ->
+	    Other
+    end.
 
 check_regulators([R|Regs], TS, TL, N, Cs) ->
     case R of
@@ -1048,23 +1072,25 @@ restore_counters(Cs, #st{} = S) ->
     lists:foldl(fun restore_counter/2, {[], S}, Cs).
 
 restore_counter({C, I}, {Revisit, #st{counters = Counters} = S}) ->
-    #cr{value = Val, queues = Qs, rate = #rate{limit = Max}} = CR =
+    #cr{value = Val, queues = Qs} = CR =
 	lists:keyfind(C, #cr.name, Counters),
     CR1 = CR#cr{value = Val - I},
     Counters1 = lists:keyreplace(C, #cr.name, Counters, CR1),
     S1 = S#st{counters = Counters1},
-    if Val == Max, I > 0 ->
-	    {union(Qs, Revisit), S1};
-       true ->
-	    {Revisit, S1}
-    end.
+    {union(Qs, Revisit), S1}. 
 
 union(L1, L2) ->
     (L1 -- L2) ++ L2.
 
 revisit_queues(Qs, S) ->
-    [revisit_queue(Q) || Q <- Qs],
+    Expanded = [{Q, get_latest_dispatch(Q, S)} || Q <- Qs],
+    [revisit_queue(Q) || {Q,_} <- lists:keysort(2, Expanded)],
     S.
+
+get_latest_dispatch(Q, #st{queues = Qs}) ->
+    #queue{latest_dispatch = Tl} =
+	lists:keyfind(Q, #queue.name, Qs),
+    Tl.
 
 revisit_queue(Qname) ->
     self() ! {check_queue, Qname}.
@@ -1186,6 +1212,7 @@ apply_corr(Type, Corr, R) ->
 
 get_rate(#rr {rate = R}) -> R;
 get_rate(#cr {rate = R}) -> R;
+get_rate({#cr {rate = R},_}) -> R;
 get_rate(#grp{rate = R}) -> R.
 
 set_rate(R, #rr {} = Reg) -> Reg#rr {rate = R};
@@ -1211,11 +1238,11 @@ queue_job(TS, From, #queue{max_size = MaxSz} = Q, S) ->
                 {OldJobs, Q1} ->
                     [timeout(J) || J <- OldJobs],
                     %% update_queue(q_in(TS, From, Q1), S)
-                    job_queued(q_in(TS, From, Q1), TS, S)
+                    job_queued(q_in(TS, From, Q1), CurSz, TS, S)
             end;
        true ->
             %% update_queue(q_in(TS, From, Q), S)
-            job_queued(q_in(TS, From, Q), TS, S)
+            job_queued(q_in(TS, From, Q), CurSz, TS, S)
     end.
 
 do_enqueue(TS, Item, #queue{max_size = MaxSz} = Q, S) ->
@@ -1300,15 +1327,22 @@ q_in(TS, From, #queue{mod = Mod, oldest_job = OJ} = Q) ->
 %%
 next_time(_TS, #queue{oldest_job = undefined}) ->
     undefined;
+next_time(_TS, #queue{check_interval = infinity}) ->
+    undefined;
 next_time(TS, #queue{latest_dispatch = TS1,
 		     check_interval = I0}) ->
     I = case I0 of
 	    _ when is_number(I0) -> I0;
+	    infinity -> undefined;
 	    {M, F, As} ->
 		M:F(TS, TS1, As)
 	end,
-    Since = (TS - TS1) div 1000,
-    erlang:max(0, trunc(I - Since)).
+    if is_number(I0) ->
+	    Since = (TS - TS1) div 1000,
+	    erlang:max(0, trunc(I - Since));
+       true ->
+	    undefined
+    end.
 
 
 %% Microsecond timestamp; never wraps

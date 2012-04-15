@@ -133,7 +133,7 @@
 -define(COUNTER(Name), {c,l,{?MODULE,Name}}).
 -define(   AGGR(Name), {a,l,{?MODULE,Name}}).
 
--define(COUNTER_SAMPLE_INTERVAL, 20000).  % UW: how was this value picked?
+-define(COUNTER_SAMPLE_INTERVAL, infinity).
 
 %% The jobs_server may, under certain circumstances, generate error reports
 %% This value, in microseconds, defines the highest frequency with which 

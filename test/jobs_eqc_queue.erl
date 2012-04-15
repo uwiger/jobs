@@ -1,5 +1,6 @@
 -module(jobs_eqc_queue).
 
+-ifdef(EQC).
 -include_lib("eqc/include/eqc.hrl").
 -include("jobs.hrl").
 
@@ -182,3 +183,5 @@ catching(F) ->
 
 set_time(#model { time = T}) ->
     meck:expect(jobs_lib, timestamp, fun() -> T end).
+
+-endif.
