@@ -228,29 +228,69 @@ timeout(From) ->
 -spec start_link() -> {ok, pid()}.
 %%
 start_link() ->
-    Opts = application:get_all_env(jobs),
-    start_link(Opts).
+    start_link(options()).
 
 -spec start_link([option()]) -> {ok, pid()}.
 %%
 start_link(Opts0) when is_list(Opts0) ->
-    Opts = expand_opts(Opts0),
+    Opts = expand_opts(sort_groups(group_opts(Opts0))),
     gen_server:start_link({local,?MODULE}, ?MODULE, Opts, []).
 
 %% Server-side callbacks and helpers
 
+-spec options() -> [{_Ctxt :: env | opts, _App:: user | atom(), [option()]}].
+options() ->
+    JobsOpts = {env, jobs, application:get_all_env(jobs)},
+    Other = try [{env, A, Os} || {A, Os} <- setup:find_env_vars(jobs)]
+	    catch
+		error:undef -> []
+	    end,
+    [JobsOpts | Other].
+
+group_opts([{_,_,_} = H|T]) ->
+    [H|group_opts(T)];
+group_opts([{_,_}|_] = Opts) ->
+    {U, Rest} = lists:splitwith(fun(X) -> size(X) == 2 end, Opts),
+    [{opts, user, U}|group_opts(Rest)];
+group_opts([]) ->
+    [].
+
+sort_groups(Gs) ->
+    %% How to give priority to certain 'global' options?
+    %% 1. Options specified explicitly in Options
+    %% 2. Options specified as 'jobs' environment variables
+    %%    (there are none by default)
+    %% 3. Options in other apps, as returned by 'setup:find_env_vars/1'
+    %%
+    %% Note that, as of now, we 'lift' all user options to the fore, even if
+    %% they appear mixed in the argument given to jobs_server:start_link/1.
+    %%
+    User = [U || {opts, user, _} = U <- Gs],
+    [Jobs] = [J || {env, jobs, _} = J <- Gs],
+    User ++ [Jobs | Gs -- [Jobs | User]].
+
 -spec expand_opts([option()]) -> [option()].
 %%
-expand_opts([{config, F}|Opts]) ->
+expand_opts([{Ctxt, A, Opts}|T]) ->
+    Exp = try expand_opts_(Opts)
+	  catch
+	      throw:{{error,R}, Arg} ->
+		  error(R, [{context, Ctxt}, {app, A} | Arg])
+	  end,
+    [{Ctxt, A, Exp}|expand_opts(T)];
+expand_opts([]) ->
+    [].
+
+expand_opts_([{config, F}|Opts]) ->
     case file:script(F) of
 	{ok, NewOpts} ->
-	    NewOpts ++ expand_opts(Opts);
-	{error, Reason} ->
-	    erlang:error(Reason, [{config,F}])
+	    NewOpts ++ expand_opts_(Opts);
+	{error, _} = E ->
+	    throw({E, [{config,F}]})
     end;
-expand_opts([H|T]) ->
-    [H|expand_opts(T)];
-expand_opts([]) ->
+expand_opts_([H|T]) ->
+    [H|expand_opts_(T)];
+expand_opts_([]) ->
     [].
 
 
@@ -268,7 +308,7 @@ init(Opts) ->
     process_flag(priority,high),
     S0 = #st{},
     [Qs, Gs, Cs] =
-	[get_value(K,Opts,Def)
+	[get_all_values(K,Opts,Def)
 	 || {K,Def} <- [{queues     , [{default,[]}]},
 			{group_rates, []},
 			{counters   , []}]],
@@ -283,7 +323,7 @@ init(Opts) ->
                    [#queue{name = N}|_] ->
                        N
                end,
-    Default = get_value(default_queue, Opts, Default0),
+    Default = get_first_value(default_queue, Opts, Default0),
     {ok, set_info(
 	   kick_producers(
 	     lift_counters(S1#st{queues        = Queues,
@@ -1372,4 +1412,38 @@ error_report(E) ->
         _ ->
             ignore
     end.
+
+%% get_value(K, [{_, _, Opts}|T], Default) ->
+%%     case lists:keyfind(K, 1, Opts) of
+%% 	false ->
+%% 	    get_value(
+
+get_all_values(K, Opts, Default) ->
+    case get_all_values(K, Opts) of
+	[] ->
+	    Default;
+	Other ->
+	    Other
+    end.
+
+get_all_values(K, [{_, _, Opts}|T]) ->
+    proplists:get_value(K, Opts, []) ++ get_all_values(K, T);
+get_all_values(K, [{K, V}|T]) ->
+    %% shouldn't happen - right, dialyzer?
+    [V | get_all_values(K, T)];
+get_all_values(_, []) ->
+    [].
+
+get_first_value(K, [{_,_,Opts}|T], Default) ->
+    case lists:keyfind(K, 1, Opts) of
+	false ->
+	    get_first_value(K, T, Default);
+	{_, V} ->
+	    V
+    end;
+get_first_value(K, [{K, V}|_], _) ->
+    %% Again, shouldn't happen
+    V;
+get_first_value(_, [], Default) ->
+    Default.
 
