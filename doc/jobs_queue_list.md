@@ -44,7 +44,7 @@ __Authors:__ : Ulf Wiger ([`ulf.wiger@erlang-solutions.com`](mailto:ulf.wiger@er
 ##Function Index##
 
 
-<table width="100%" border="1" cellspacing="0" cellpadding="2" summary="function index"><tr><td valign="top"><a href="#all-1">all/1</a></td><td></td></tr><tr><td valign="top"><a href="#delete-1">delete/1</a></td><td></td></tr><tr><td valign="top"><a href="#empty-1">empty/1</a></td><td></td></tr><tr><td valign="top"><a href="#in-3">in/3</a></td><td></td></tr><tr><td valign="top"><a href="#info-2">info/2</a></td><td></td></tr><tr><td valign="top"><a href="#is_empty-1">is_empty/1</a></td><td></td></tr><tr><td valign="top"><a href="#new-2">new/2</a></td><td></td></tr><tr><td valign="top"><a href="#out-2">out/2</a></td><td></td></tr><tr><td valign="top"><a href="#timedout-1">timedout/1</a></td><td></td></tr><tr><td valign="top"><a href="#timedout-2">timedout/2</a></td><td></td></tr></table>
+<table width="100%" border="1" cellspacing="0" cellpadding="2" summary="function index"><tr><td valign="top"><a href="#all-1">all/1</a></td><td></td></tr><tr><td valign="top"><a href="#delete-1">delete/1</a></td><td></td></tr><tr><td valign="top"><a href="#empty-1">empty/1</a></td><td></td></tr><tr><td valign="top"><a href="#in-3">in/3</a></td><td></td></tr><tr><td valign="top"><a href="#info-2">info/2</a></td><td></td></tr><tr><td valign="top"><a href="#is_empty-1">is_empty/1</a></td><td></td></tr><tr><td valign="top"><a href="#new-2">new/2</a></td><td></td></tr><tr><td valign="top"><a href="#out-2">out/2</a></td><td></td></tr><tr><td valign="top"><a href="#peek-1">peek/1</a></td><td></td></tr><tr><td valign="top"><a href="#representation-1">representation/1</a></td><td></td></tr><tr><td valign="top"><a href="#timedout-1">timedout/1</a></td><td></td></tr><tr><td valign="top"><a href="#timedout-2">timedout/2</a></td><td></td></tr></table>
 
 
 <a name="functions"></a>
@@ -132,6 +132,24 @@ __Authors:__ : Ulf Wiger ([`ulf.wiger@erlang-solutions.com`](mailto:ulf.wiger@er
 <pre>out(N::integer(), Queue::#queue{}) -> {[<a href="#type-entry">entry()</a>], #queue{}}</pre>
 <br></br>
 
+
+<a name="peek-1"></a>
+
+###peek/1##
+
+
+
+
+`peek(Queue) -> any()`
+
+<a name="representation-1"></a>
+
+###representation/1##
+
+
+
+
+`representation(Queue) -> any()`
 
 <a name="timedout-1"></a>
 

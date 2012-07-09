@@ -25,7 +25,7 @@ specifies the behaviour itself.<a name="index"></a>
 ##Function Index##
 
 
-<table width="100%" border="1" cellspacing="0" cellpadding="2" summary="function index"><tr><td valign="top"><a href="#all-1">all/1</a></td><td>Return all the job entries in the queue, not removing them from the queue.</td></tr><tr><td valign="top"><a href="#behaviour_info-1">behaviour_info/1</a></td><td></td></tr><tr><td valign="top"><a href="#delete-1">delete/1</a></td><td>Queue is being deleted; remove any external data structures.</td></tr><tr><td valign="top"><a href="#empty-1">empty/1</a></td><td></td></tr><tr><td valign="top"><a href="#in-3">in/3</a></td><td>Enqueue a job reference; return the updated queue.</td></tr><tr><td valign="top"><a href="#info-2">info/2</a></td><td>Return information about the queue.</td></tr><tr><td valign="top"><a href="#is_empty-1">is_empty/1</a></td><td></td></tr><tr><td valign="top"><a href="#new-2">new/2</a></td><td>Instantiate a new queue.</td></tr><tr><td valign="top"><a href="#out-2">out/2</a></td><td>Dequeue a batch of N jobs; return the modified queue.</td></tr><tr><td valign="top"><a href="#peek-1">peek/1</a></td><td>Looks at the first item in the queue, without removing it.</td></tr><tr><td valign="top"><a href="#timedout-1">timedout/1</a></td><td>Return all entries that have been in the queue longer than MaxTime.</td></tr><tr><td valign="top"><a href="#timedout-2">timedout/2</a></td><td></td></tr></table>
+<table width="100%" border="1" cellspacing="0" cellpadding="2" summary="function index"><tr><td valign="top"><a href="#all-1">all/1</a></td><td>Return all the job entries in the queue, not removing them from the queue.</td></tr><tr><td valign="top"><a href="#behaviour_info-1">behaviour_info/1</a></td><td></td></tr><tr><td valign="top"><a href="#delete-1">delete/1</a></td><td>Queue is being deleted; remove any external data structures.</td></tr><tr><td valign="top"><a href="#empty-1">empty/1</a></td><td></td></tr><tr><td valign="top"><a href="#in-3">in/3</a></td><td>Enqueue a job reference; return the updated queue.</td></tr><tr><td valign="top"><a href="#info-2">info/2</a></td><td>Return information about the queue.</td></tr><tr><td valign="top"><a href="#is_empty-1">is_empty/1</a></td><td></td></tr><tr><td valign="top"><a href="#new-2">new/2</a></td><td>Instantiate a new queue.</td></tr><tr><td valign="top"><a href="#out-2">out/2</a></td><td>Dequeue a batch of N jobs; return the modified queue.</td></tr><tr><td valign="top"><a href="#peek-1">peek/1</a></td><td>Looks at the first item in the queue, without removing it.</td></tr><tr><td valign="top"><a href="#representation-1">representation/1</a></td><td>A representation of a queue which can be inspected.</td></tr><tr><td valign="top"><a href="#timedout-1">timedout/1</a></td><td>Return all entries that have been in the queue longer than MaxTime.</td></tr><tr><td valign="top"><a href="#timedout-2">timedout/2</a></td><td></td></tr></table>
 
 
 <a name="functions"></a>
@@ -183,7 +183,18 @@ especially if the queue becomes empty.<a name="peek-1"></a>
 
 
 Looks at the first item in the queue, without removing it.
-<a name="timedout-1"></a>
+<a name="representation-1"></a>
+
+###representation/1##
+
+
+
+
+`representation(Queue) -> any()`
+
+
+
+A representation of a queue which can be inspected<a name="timedout-1"></a>
 
 ###timedout/1##
 
