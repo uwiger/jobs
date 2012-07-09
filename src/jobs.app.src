@@ -17,7 +17,7 @@
 
 {application, jobs,
  [
-  {vsn, "0.1"},
+  {vsn, git},
   {description, "Job scheduler"},
   {applications, [kernel, stdlib]},
   {registered, []},
