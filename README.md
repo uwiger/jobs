@@ -49,10 +49,33 @@ dampener and run at full speed again.
 Examples
 --------
 
+### A queue that only allows 3 jobs to run concurrently
 
+    jobs:add_queue(three_at_once, [{regulators, [{counter, [{limit, 3}]}]}]). 
+    Task = fun(N) ->
+        io:format("Task ~p started\n", [N]),
+        timer:sleep(2000),
+        io:format("Task ~p finished, took 2 seconds.\n", [N])
+    end,
+    lists:foreach(fun(N) ->
+        spawn( fun() ->
+            jobs:run(three_at_once, fun() -> Task(N) end)
+        end)        
+    end, lists:seq(1,10)).
 
-To be done
+### A queue that starts 3 jobs per second, regardless of job duration
 
+    jobs:add_queue(three_per_sec, [{regulators, [{rate, [{limit, 3}]}]}]). 
+    Task = fun(N) ->
+        io:format("Task ~p started\n", [N]),
+        timer:sleep(2000),
+        io:format("Task ~p finished, took 2 seconds.\n", [N])
+    end,
+    lists:foreach(fun(N) ->
+        spawn( fun() ->
+            jobs:run(three_per_sec, fun() -> Task(N) end)
+        end)        
+    end, lists:seq(1,10)).
 
 
 Prerequisites
