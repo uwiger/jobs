@@ -114,7 +114,7 @@ run(Type, Fun) when is_function(Fun, 0) ->
 -spec done(reg_obj()) -> ok.
 %%
 done(Opaque) ->
-    gen_server:cast(?MODULE, {done, Opaque}).
+    gen_server:cast(?MODULE, {done, self(), Opaque}).
 
 
 -spec enqueue(job_class(), any()) -> ok.
