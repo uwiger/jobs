@@ -547,11 +547,12 @@ interval(Limit) ->
     1000 / Limit.
 
 set_info(S) ->
-    S#st{info_f = fun(Q) ->
-                          %% We need to clear the info_f attribute, to
-                          %% avoid recursively inheriting all previous states.
-                          get_info(Q, S#st{info_f = undefined})
-                  end}.
+    %% We need to clear the info_f attribute, to
+    %% avoid recursively inheriting all previous states.
+    S1 = S#st{info_f = undefined},
+    S1#st{info_f = fun(Q) ->
+			   get_info(Q, S1)
+		   end}.
 
 
 %% Gen_server callbacks
@@ -785,7 +786,7 @@ terminate(_,_) ->
     ok.
 
 code_change(_FromVsn, St, _Extra) ->
-    {ok, St}.
+    {ok, set_info(St)}.
 
 
 %% Internal functions
