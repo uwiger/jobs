@@ -46,12 +46,29 @@ dampener and run at full speed again.
 
 
 
-Examples
---------
+Quickstart
+----------
+
+Compile and start a shell:
+
+    $ rebar get-deps
+    $ rebar compile
+    $ erl -pa ebin/ -pa deps/*/ebin -boot start_sasl
+
+Start the ````jobs```` application:
+
+    1> application:start(jobs).
+
+Paste an example from below into the shell.
 
 ### A queue that only allows 3 jobs to run concurrently
 
-    jobs:add_queue(three_at_once, [{regulators, [{counter, [{limit, 3}]}]}]). 
+    jobs:add_queue(three_at_once, [
+        {regulators, [{counter, [
+                        {name, three_at_once},
+                        {limit, 3}
+                      ]}]}
+    ]). 
     Task = fun(N) ->
         io:format("Task ~p started\n", [N]),
         timer:sleep(2000),
@@ -63,9 +80,18 @@ Examples
         end)        
     end, lists:seq(1,10)).
 
+#### To change the queue from 3-at-once to 2-at-once:
+
+    jobs:modify_counter(three_at_once, [{limit,2}]).
+
 ### A queue that starts 3 jobs per second, regardless of job duration
 
-    jobs:add_queue(three_per_sec, [{regulators, [{rate, [{limit, 3}]}]}]). 
+    jobs:add_queue(three_per_sec, [
+        {regulators, [{rate, [
+                        {name, three_per_sec},
+                        {limit, 3}
+                     ]}]}
+    ]). 
     Task = fun(N) ->
         io:format("Task ~p started\n", [N]),
         timer:sleep(2000),
@@ -77,6 +103,10 @@ Examples
         end)        
     end, lists:seq(1,10)).
 
+
+#### To change the queue from 3 jobs/sec to 2 jobs/sec:
+
+    jobs:modify_regulator(rate, three_per_sec, three_per_sec, [{limit, 2}]).
 
 Prerequisites
 -------------
