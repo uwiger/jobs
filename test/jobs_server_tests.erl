@@ -22,6 +22,9 @@ rate_test_() ->
        %% , {[{rate,100},
        %% 	   {group,50}], fun(O,_) -> [fun() -> max_rate_test(O,1) end] end}
        , {{count,3}, fun(_,_) -> [fun() -> counter_run(30,1) end] end}
+       , {{timeout,500}, fun(_,_) -> [fun() ->
+					      ?debugVal(timeout_test(500))
+				      end] end}
       ]}.
 
 
@@ -48,6 +51,19 @@ counter_run(N, Target) ->
 		 end),
     ?debugVal({T,Ts}).
 
+timeout_test(T) ->
+    case timer:tc(jobs, ask, [q]) of
+	{US, {error, timeout}} ->
+	    case (US div 1000) - T of
+		Diff when Diff < 5 ->
+		    ok;
+		Other ->
+		    error({timeout_too_late, Other})
+	    end;
+	Other ->
+	    error({timeout_expected, Other})
+    end.
+
 time_eval(_R, _N, T, Ts, Expected) ->
     [{Hd,_}|Tl] = lists:sort(Ts),
     Diffs = [X-Hd || {X,_} <- Tl],
@@ -58,23 +74,23 @@ time_eval(_R, _N, T, Ts, Expected) ->
 	      "Time: ~p, Ratio = ~.1f, Max = ~p, "
 	      "Mean = ~.1f, Variance = ~.1f~n",
 	      [T, Ratio, Max, Mean, Variance]).
-    
+
 
 time_variance(L) ->
     N = length(L),
     Mean = lists:sum(L) / N,
     SQ = fun(X) -> X*X end,
     {Mean, math:sqrt(lists:sum([SQ(X-Mean) || X <- L]) / N)}.
-		 
 
 
-counter_test(Count) ->
-    start_test_server({count,Count}),
-    Res = tc(fun() ->
-		     pmap(fun() -> jobs:run(q, one_job(count)) end, Count * 2)
-	     end),
-    io:fwrite(user, "~p~n", [Res]),
-    stop_server().
+
+%% counter_test(Count) ->
+%%     start_test_server({count,Count}),
+%%     Res = tc(fun() ->
+%% 		     pmap(fun() -> jobs:run(q, one_job(count)) end, Count * 2)
+%% 	     end),
+%%     io:fwrite(user, "~p~n", [Res]),
+%%     stop_server().
 
 
 pmap(F, N) ->
@@ -121,7 +137,19 @@ start_test_server(Silent, {count, Count}) ->
 				      }]}
 				   ]}
 			      ]}
+		    ]);
+start_test_server(Silent, {timeout, T}) ->
+    start_with_conf(Silent,
+		    [{queues, [{q, [{regulators,
+				     [{counter,[
+						{limit, 0}
+					       ]}
+				     ]},
+				    {max_time, T}
+				   ]}
+			      ]}
 		    ]).
+
 
 start_with_conf(Silent, Conf) ->
     application:unload(jobs),

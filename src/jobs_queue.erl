@@ -47,7 +47,7 @@
 -export([behaviour_info/1]).
 
 -include("jobs.hrl").
--import(jobs_lib, [timestamp/0]).
+-import(jobs_server, [timestamp/0]).
 
 -record(st, {table}).
 

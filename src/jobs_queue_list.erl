@@ -122,7 +122,7 @@ timedout(#queue{max_time = TO} = Q) ->
 
 timedout(_ , #queue{oldest_job = undefined}) -> [];
 timedout(TO, #queue{st = L} = Q) ->
-    Now = jobs_lib:timestamp(),
+    Now = jobs_server:timestamp(),
     {Left, Timedout} = lists:splitwith(fun({TS,_}) ->
                                                not(is_expired(TS,Now,TO)) 
                                        end, L),

@@ -219,7 +219,7 @@ approve(From, Counters) ->
 reject(From) ->
     gen_server:reply(From, {error, rejected}).
 
-timeout(From) ->
+timeout({_, {Pid,Ref} = From}) when is_pid(Pid), is_reference(Ref) ->
     gen_server:reply(From, {error, timeout}).
 
 
@@ -901,8 +901,24 @@ job_queued(#queue{check_counter = Ctr} = Q, PrevSz, TS, S) ->
 	    end
     end.
 
+check_timedout(#queue{max_time   = undefined} = Q, _) -> Q;
+check_timedout(#queue{oldest_job = undefined} = Q, _) -> Q;
+check_timedout(#queue{max_time   = MaxT,
+		      oldest_job = Oldest} = Q, TS) ->
+    if (TS - Oldest) > MaxT * 1000 ->
+	    case q_timedout(Q) of
+		[] -> Q;
+		{OldJobs, Q1} ->
+		    [timeout(J) || J <- OldJobs],
+		    Q1
+	    end;
+       true ->
+	    Q
+    end.
+
+
 perform_queue_check(Q, TS, S) ->
-    Q1 = maybe_cancel_timer(Q),
+    Q1 = check_timedout(maybe_cancel_timer(Q), TS),
     case check_queue(Q1, TS, S) of
 	{0, _, _} ->
 	    update_queue(Q1, S);
@@ -1368,22 +1384,43 @@ q_in(TS, From, #queue{mod = Mod, oldest_job = OJ} = Q) ->
 %% Calculate the delay (in ms) until queue is checked again.
 %%
 next_time(_TS, #queue{oldest_job = undefined}) ->
+    %% queue is empty
     undefined;
-next_time(_TS, #queue{check_interval = infinity}) ->
-    undefined;
+%% next_time(TS, #queue{check_interval = infinity,
+%% 		      max_time = MaxT,
+%% 		      oldest_job = Oldest}) ->
+%%     case MaxT of
+%% 	undefined -> undefined;
+%% 	_ ->
+%% 	    %% timestamps are us, timeouts need to be in ms
+%% 	    erlang:max(0, MaxT - ((TS - Oldest) div 1000))
+%%     end;
 next_time(TS, #queue{latest_dispatch = TS1,
-		     check_interval = I0}) ->
+		     check_interval = I0,
+		     max_time = MaxT,
+		     oldest_job = Oldest}) ->
     I = case I0 of
 	    _ when is_number(I0) -> I0;
 	    infinity -> undefined;
 	    {M, F, As} ->
 		M:F(TS, TS1, As)
 	end,
-    if is_number(I0) ->
-	    Since = (TS - TS1) div 1000,
-	    erlang:max(0, trunc(I - Since));
-       true ->
-	    undefined
+    TO = case MaxT of
+	     undefined -> undefined;
+	     _ when is_integer(MaxT) ->
+		 MaxT - ((TS - Oldest) div 1000)
+	 end,
+    NextI = if is_number(I) ->
+		    Since = (TS - TS1) div 1000,
+		    erlang:max(0, trunc(I - Since));
+	       true ->
+		    undefined
+	    end,
+    case {TO, NextI} of
+	{undefined,undefined} -> undefined;
+	{undefined,_} -> NextI;
+	{_,undefined} -> TO;
+	{_,_} -> erlang:min(TO, NextI)
     end.
 
 
