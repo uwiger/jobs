@@ -11,7 +11,7 @@ compile:
 	rebar compile
 
 test: all
-	rebar eunit
+	rebar eunit skip_deps=true
 
 clean:
 	rebar clean
