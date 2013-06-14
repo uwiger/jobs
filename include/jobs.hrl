@@ -94,8 +94,14 @@
 
 -type m_f_args() :: {atom(), atom(), list()}.
 
--record(producer, {f={erlang,error,[undefined_producer]}
-		   :: m_f_args() | function()}).
+%% -record(producer, {f={erlang,error,[undefined_producer]}
+%%                 :: m_f_args() | function(),
+%%                 mode = spawn :: spawn | {stateful, }).
+-record(producer, {mod = jobs_prod_simple,
+                   state}).
+
+%% -record(producer, {f={erlang,error,[undefined_producer]}
+%% 		   :: m_f_args() | function()}).
 -record(passive , {type = fifo   :: fifo}).
 -record(action  , {a = approve   :: approve | reject}).
 
@@ -108,6 +114,8 @@
 		max_time             :: undefined | integer(),
 		max_size             :: undefined | integer(),
 		latest_dispatch = 0  :: integer(),
+		approved = 0,
+		queued = 0,
 		check_interval       :: integer() | mfa(),
 		oldest_job           :: undefined | integer(),
 		timer,
@@ -124,6 +132,8 @@
 		  hist_length = 10,
                   history = queue:new()}).
 
+-record(stateless, {f}).
+-record(stateful, {f, st}).
 
 %% Gproc counter objects for counter-based regulation
 %% Each worker process gets a counter object. The aggregated counter,

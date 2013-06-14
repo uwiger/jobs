@@ -586,9 +586,9 @@ set_info(S) ->
 %% Gen_server callbacks
 handle_call(Req, From, S) ->
     try i_handle_call(Req, From, S) of
-        {noreply, S1} ->
+        {noreply, #st{} = S1} ->
             {noreply, set_info(S1)};
-        {reply, R, S1} ->
+        {reply, R, #st{} = S1} ->
             {reply, R, set_info(S1)}
     catch
         error:Reason ->
@@ -807,12 +807,13 @@ handle_info({check_queue, Name}, #st{queues = Qs} = S) ->
     case get_queue(Name, Qs) of
         #queue{} = Q ->
             TS = timestamp(),
-	    {noreply, perform_queue_check(Q#queue{timer = undefined}, TS, S)};
+	    {Q1, S1} = perform_queue_check(Q#queue{timer = undefined}, TS, S),
+	    {noreply, update_queue(restart_timer(Q1), S1)};
         _ ->
             {noreply, S}
     end;
 handle_info(_Msg, S) ->
-    io:fwrite("~p: handle_info(~p,_)~n", [?MODULE, _Msg]),
+    io:fwrite("~p: handle_info(~p,~p)~n", [?MODULE, _Msg,S]),
     {noreply, S}.
 
 terminate(_,_) ->
@@ -956,11 +957,12 @@ perform_queue_check(Q, TS, S) ->
 	{0, _, _} ->
 	    update_queue(Q1, S);
 	{N, Counters, Regs} when N > 0 ->
-	    {Jobs, Q2} = dispatch_N(N, Counters, Q1, S),
-	    {Q3, S3} = update_regulators(
-			 Regs, Q2#queue{latest_dispatch = TS,
-					check_counter = 0}, S),
-	    update_counters(Jobs, Counters, update_queue(Q3, S3));
+	    {Nd, _Jobs, Q2} = dispatch_N(N, Counters, TS, Q1, S),
+	    {_Q3, _S3} = update_counters_and_regs(Nd, Counters, Regs, Q2, S);
+	    %% {Q3, S3} = update_regulators(
+	    %% 		 Regs, Q2#queue{latest_dispatch = TS,
+	    %% 				check_counter = 0}, S),
+	    %% update_counters(Jobs, Counters, update_queue(Q3, S3));
 	Bad ->
 	    erlang:error({bad_N, Bad})
     end.
@@ -1027,6 +1029,8 @@ get_counters(QName, #st{queues = Qs} = S) ->
 %% include_regulator(R, Local, Regs, S) ->
 %%     [{R, Local}|expand_regulators(Regs, S)].
 
+update_counters_and_regs(NJobs, Counters, Regs, Q, S) ->
+    update_regulators(Regs, Q, update_counters(NJobs, Counters, S)).
 
 update_regulators(Regs, Q0, S0) ->
     lists:foldl(
@@ -1109,35 +1113,73 @@ check_cr(Val, I, Max) ->
 	    0
     end.
 
--spec dispatch_N(integer() | infinity, [any()], #queue{}, #st{}) ->
+-spec dispatch_N(integer() | infinity, [any()], integer(), #queue{}, #st{}) ->
 			{list(), #queue{}}.
 %%
-dispatch_N(N, _Counters, #queue{name = QName,
-				type = #producer{f = F}} = Q,
-	   #st{monitors = Mons}) ->
-    Jobs = [spawn_mon_producer(F) || _ <- lists:seq(1,N)],
+dispatch_N(N, Counters, TS, #queue{name = QName,
+				    approved = Approved0,
+				    type = #producer{mod = Mod,
+						     state = MS} = Prod} = Q,
+	   #st{monitors = Mons, info_f = I}) ->
+    {Jobs, MS1} = spawn_producers(N, Mod, MS, Counters, I),
+    monitor_jobs(Jobs, QName, Mons),
+    Prod1 = Prod#producer{state = MS1},
+    %% Jobs = [spawn_mon_producer(F) || _ <- lists:seq(1,N)],
+    %% lists:foreach(
+    %%   fun({Pid,Ref}) ->
+    %% 	      ets:insert(Mons, {{Pid,Ref}, QName})
+    %%   end, Jobs),
+    %% {Jobs, Q};
+    {N, Jobs, Q#queue{type = Prod1, approved = Approved0 + N,
+		      latest_dispatch = TS}};
+dispatch_N(N, Counters, TS, Q, #st{} = S) ->
+    {Jobs, Q1} = q_out(N, Q),
+    dispatch_jobs(Jobs, Counters, TS, Q1, S).
+
+dispatch_jobs(Jobs, [], TS, Q, _) ->
+    Nd = lists:foldl(
+           fun(Job, N) ->
+                   {_, Client, Opaque} = job_opaque(Job, []),
+                   approve(Client, {undefined, Opaque}),
+                   N+1
+           end, 0, Jobs),
+    Approved0 = Q#queue.approved,
+    {Nd, Jobs, Q#queue{latest_dispatch = TS,
+		       approved = Approved0 + Nd}};
+dispatch_jobs(Jobs, Counters, TS, Q, #st{monitors = Mons}) ->
+    Opaque0 = [{counters, Counters}],
+    Nd = lists:foldl(
+	   fun(Job, N) ->
+		   {Pid, Client, Opaque} = job_opaque(Job, Opaque0),
+		   Ref = erlang:monitor(process, Pid),
+		   approve(Client, {Ref, Opaque}),
+		   ets:insert(Mons, {{Pid, Ref}, Q#queue.name}),
+		   N+1
+	   end, 0, Jobs),
+    Approved0 = Q#queue.approved,
+    {Nd, Jobs, Q#queue{latest_dispatch = TS,
+		       approved = Approved0 + Nd}}.
+
+spawn_producers(N, Mod, ModS, Counters, I) ->
+    spawn_producers(N, Mod, ModS, [{counters, Counters}], I, []).
+
+spawn_producers(N, Mod, ModS, Opaque, I, Acc) when N > 0 ->
+    {F, ModS1} = Mod:next(Opaque, ModS, I),
+    spawn_producers(N-1, Mod, ModS1, Opaque, I,
+                    [spawn_monitor(F) | Acc]);
+spawn_producers(_, _, ModS, _, _, Acc) ->
+    {Acc, ModS}.
+
+monitor_jobs(Jobs, QName, Mons) ->
     lists:foreach(
       fun({Pid,Ref}) ->
-	      ets:insert(Mons, {{Pid,Ref}, QName})
-      end, Jobs),
-    {Jobs, Q};
-dispatch_N(N, Counters, Q, #st{monitors = Mons}) ->
-    {Jobs, _Q1} = Res = q_out(N, Q),
-    Opaque0 = [{counters, Counters}],
-    lists:foreach(
-      fun(Job) ->
-	      {Pid, Client, Opaque} = job_opaque(Job, Opaque0),
-	      Ref = erlang:monitor(process, Pid),
-	      approve(Client, {Ref, Opaque}),
-	      ets:insert(Mons, {{Pid,Ref}, Q#queue.name})
-      end, Jobs),
-    %% [approve(Client, Counters) || {_, Client} <- Jobs],
-    Res.
+              ets:insert(Mons, {{Pid,Ref}, QName})
+      end, Jobs).
 
-spawn_mon_producer({M, F, A}) ->
-    spawn_monitor(M, F, A);
-spawn_mon_producer(F) when is_function(F, 0) ->
-    spawn_monitor(F).
+%% spawn_mon_producer({M, F, A}) ->
+%%     spawn_monitor(M, F, A);
+%% spawn_mon_producer(F) when is_function(F, 0) ->
+%%     spawn_monitor(F).
 
 
 job_opaque({_, {Pid,_} = Client}, Opaque) ->
@@ -1146,19 +1188,13 @@ job_opaque({_, {Pid,_} = Client, Info}, Opaque) ->
     {Pid, Client, [{info, Info} | Opaque]}.
 
 
-update_counters(Jobs, Cs,
-		#st{counters = Counters} = S) ->
-    N = length(Jobs),
-    %% Clients = [{{Pid, erlang:monitor(process, Pid)}, QName} ||
-    %% 		  {_, {Pid,_}} <- Jobs],
-    %% ets:insert(Mons, Clients),
+update_counters(_, [], S) -> S;
+update_counters(N, Cs, #st{counters = Counters} = S) ->
     Counters1 =
 	lists:foldl(
 	  fun({C,I}, Acc) ->
 		  #cr{value = Old} = CR =
 		      lists:keyfind(C, #cr.name, Acc),
-		  %% io:fwrite("updating #cr{name = ~p}; Old=~p, I=~p, N=~p~n",
-		  %% 	    [C,Old,I,N]),
 		  CR1 = CR#cr{value = Old + I*N},
 		  lists:keyreplace(C, #cr.name, Acc, CR1)
 	  end, Counters, Cs),
@@ -1208,6 +1244,9 @@ kick_producers(#st{queues = Qs} = S) ->
 	      ok
       end, Qs),
     S.
+
+restart_timer(Q) ->
+    start_timer(maybe_cancel_timer(Q)).
 
 start_timer(#queue{timer = TRef} = Q) when TRef =/= undefined ->
     Q;
@@ -1385,7 +1424,9 @@ q_new(Opts) ->
 		max_time = MaxTime,
 		max_size = MaxSize},
     case Type of
-	{producer, F} -> Q0#queue{type = #producer{f    = F}};
+	{producer, F} ->
+	    init_producer(F, Opts, Q0);
+	    %% Q0#queue{type = #producer{f    = F}};
 	{action  , A} -> Q0#queue{type = #action  {a    = A}};
 	_ ->
 	    #queue{} = q_new(Opts, Q0, Mod)
@@ -1399,6 +1440,20 @@ queue_options(Opts, #queue{type = #passive{type = T}}) ->
 queue_options(Opts, _) ->
     Opts.
 
+init_producer(Type, _Opts, Q) ->
+    {Mod, Args} =
+        case Type of
+            F when is_function(F, 0); is_function(F, 2) ->
+                {jobs_prod_simple, F};
+            {M,F,A} ->
+                {jobs_prod_simple, {M,F,A}};
+            {M, A} when is_atom(M) ->
+                {M, A}
+        end,
+    ModS = Mod:init(Args, jobs_info:pp(Q)),
+    Q#queue{type = #producer{mod = Mod,
+                             state = ModS}}.
+
 
 
 q_all     (#queue{mod = Mod} = Q)     -> Mod:all     (Q).
@@ -1408,9 +1463,9 @@ q_delete  (#queue{mod = Mod} = Q)     -> Mod:delete  (Q).
 %q_is_empty(#queue{type = #producer{}}) -> false;
 q_is_empty(#queue{mod = Mod} = Q)       -> Mod:is_empty(Q).
 %%
-q_out(infinity, #queue{mod = Mod} = Q) -> Mod:out(q_info(length, Q), Q);
-q_out      (N , #queue{mod = Mod} = Q) -> Mod:out     (N, Q).
-q_info     (I , #queue{mod = Mod} = Q) -> Mod:info    (I, Q).
+q_out     (infinity, #queue{mod = Mod} = Q) -> Mod:all  (Q);
+q_out     (N , #queue{mod = Mod} = Q) -> Mod:out     (N, Q).
+q_info    (I , #queue{mod = Mod} = Q) -> Mod:info    (I, Q).
 %%
 q_in(TS, From, #queue{mod = Mod, oldest_job = OJ} = Q) ->
     OJ1 = erlang:min(TS, OJ),    % Works even if OJ==undefined
