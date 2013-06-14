@@ -81,9 +81,9 @@ behaviour_info(_) ->
 %%
 new(Options, Q) ->
     case proplists:get_value(type, Options, fifo) of
-        fifo ->
-            Tab = ets:new(?MODULE, [ordered_set]),
-            Q#queue{st = #st{table = Tab}}
+	fifo ->
+	    Tab = ets:new(?MODULE, [ordered_set]),
+	    Q#queue{st = #st{table = Tab}}
     end.
 
 %% @doc A representation of a queue which can be inspected

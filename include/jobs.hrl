@@ -121,6 +121,7 @@
 		timer,
 		check_counter = 0    :: integer(),
 		waiters = []         :: [{pid(), reference()}],
+		stateful,
 		st
 	       }).
 

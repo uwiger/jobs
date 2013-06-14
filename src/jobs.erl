@@ -94,9 +94,8 @@ done(Opaque) ->
 %% </pre>
 %% @end
 %%
-run(Queue, F) when is_function(F, 0) ->
+run(Queue, F) when is_function(F, 0); is_function(F, 1) ->
     jobs_server:run(Queue, F).
-
 
 enqueue(Queue, Item) ->
     jobs_server:enqueue(Queue, Item).
@@ -111,7 +110,7 @@ dequeue(Queue, N) when N =:= infinity; is_integer(N), N > 0 ->
 %% granted job request. This could be used e.g. for load-balancing strategies.
 %% @end
 %%
-job_info(Opaque) ->
+job_info({_, Opaque}) ->
     proplists:get_value(info, Opaque).
 
 %% @spec add_queue(Name::any(), Options::[{Key,Value}]) -> ok

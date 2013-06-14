@@ -109,12 +109,25 @@ run(Type, Fun) when is_function(Fun, 0) ->
                 end;
         {error,Reason} ->
             erlang:error(Reason)
+    end;
+run(Type, Fun) when is_function(Fun, 1) ->
+    case ask(Type) of
+        {ok, Opaque} ->
+            try Fun(Opaque)
+                after
+                    done(Opaque)
+                end;
+        {error,Reason} ->
+            erlang:error(Reason)
     end.
 
 -spec done(reg_obj()) -> ok.
 %%
 done(Opaque) ->
-    gen_server:cast(?MODULE, {done, self(), Opaque}).
+    gen_server:cast(?MODULE, {done, self(), del_info(Opaque)}).
+
+del_info({Ref, L}) ->
+    {Ref, lists:keydelete(info, 1, L)}.
 
 
 -spec enqueue(job_class(), any()) -> ok.
@@ -393,6 +406,8 @@ normalize_options(Opts) ->
 		standard_counter(C);
 	   ({producer, F}) ->
 		[{type, {producer, F}}];
+	   (passive) ->
+		[{type, {passive, fifo}}];
 	   ({K, V}) ->
 		[{K, V}]
 	end, Opts)).
@@ -604,11 +619,12 @@ i_handle_call({ask, Type}, From, #st{queues = Qs} = S) ->
     {Qname, S1} = select_queue(Type, TS, S),
     case get_queue(Qname, Qs) of
         #queue{type = #action{a = approve}} -> approve(From, []), {noreply, S1};
-	#queue{type = #action{a = reject}}  -> reject(From)     , {noreply, S1};
+	#queue{type = #action{a = reject}} ->  reject(From)     , {noreply, S1};
 	#queue{type = #producer{}} ->
 	    {reply, badarg, S1};
         #queue{} = Q ->
-            {noreply, queue_job(TS, From, Q, S1)};
+            {Q2, S2} = queue_job(TS, From, Q, S1),
+	    {noreply, update_queue(Q2, S2)};
         false ->
             {reply, badarg, S1}
     end;
@@ -758,21 +774,27 @@ i_handle_call({ask_queue, QName, Req}, From, #st{queues = Qs} = S) ->
     case get_queue(QName, Qs) of
 	false ->
 	    {reply, badarg, S};
-	#queue{mod = M, st = QSt} = Q ->
+	#queue{stateful = Stf} = Q ->
 	    SetQState =
-		fun(St) ->
+		fun(Stf1) ->
 			S#st{queues =
 				 lists:keyreplace(QName, #queue.name, Qs,
-						  Q#queue{st = St})}
+						  Q#queue{stateful = Stf1})}
 		end,
 	    %% We don't catch errors; this is done at the level above.
 	    %% One possible error is that the queue module doesn't have a 
 	    %% handle_call/3 callback.
-	    case M:handle_call(Req, From, QSt) of
-		{reply, Rep, QSt1} ->
-		    {reply, Rep, SetQState(QSt1)};
-		{noreply, QSt1} ->
-		    {noreply, SetQState(QSt1)}
+	    case ask_stateful(Req, From, Stf, S#st.info_f) of
+		badarg -> {reply, badarg, S};
+		{reply, Reply, Stf1} ->
+		    {reply, Reply, SetQState(Stf1)};
+		{noreply, Stf1} ->
+		    {noreply, SetQState(Stf1)}
+	    %% case M:handle_call(Req, From, QSt) of
+	    %% 	{reply, Rep, QSt1} ->
+	    %% 	    {reply, Rep, SetQState(QSt1)};
+	    %% 	{noreply, QSt1} ->
+	    %% 	    {noreply, SetQState(QSt1)}
 	    end
     end;
 i_handle_call(_Req, _, S) ->
@@ -931,7 +953,7 @@ job_queued(#queue{check_counter = Ctr} = Q, PrevSz, TS, S) ->
 	    if PrevSz == 0 ->
 		    perform_queue_check(Q1, TS, S);
 	       true ->
-		    update_queue(Q#queue{check_counter = C}, S)
+		    {Q#queue{check_counter = C}, S}
 	    end
     end.
 
@@ -955,7 +977,7 @@ perform_queue_check(Q, TS, S) ->
     Q1 = check_timedout(maybe_cancel_timer(Q), TS),
     case check_queue(Q1, TS, S) of
 	{0, _, _} ->
-	    update_queue(Q1, S);
+	    {Q1, update_queue(Q1, S)};
 	{N, Counters, Regs} when N > 0 ->
 	    {Nd, _Jobs, Q2} = dispatch_N(N, Counters, TS, Q1, S),
 	    {_Q3, _S3} = update_counters_and_regs(Nd, Counters, Regs, Q2, S);
@@ -1136,29 +1158,53 @@ dispatch_N(N, Counters, TS, Q, #st{} = S) ->
     {Jobs, Q1} = q_out(N, Q),
     dispatch_jobs(Jobs, Counters, TS, Q1, S).
 
-dispatch_jobs(Jobs, [], TS, Q, _) ->
-    Nd = lists:foldl(
-           fun(Job, N) ->
-                   {_, Client, Opaque} = job_opaque(Job, []),
-                   approve(Client, {undefined, Opaque}),
-                   N+1
-           end, 0, Jobs),
+dispatch_jobs(Jobs, [], TS, #queue{name = QName, stateful = Stf0} = Q,
+	      #st{info_f = I, monitors = Mons}) ->
+    {Nd, NStf} = lists:foldl(
+		   fun({_,{Pid,Ref}} = Job, {N, Stf}) ->
+			   ets:insert(Mons, {{Pid,Ref}, QName}),
+			   {_, Client, Opaque, Stf1} =
+			       job_opaque(Job, [], Stf, I),
+			   approve(Client, {Ref, Opaque}),
+			   {N+1, Stf1}
+		   end, {0, Stf0}, Jobs),
     Approved0 = Q#queue.approved,
     {Nd, Jobs, Q#queue{latest_dispatch = TS,
+		       stateful = NStf,
 		       approved = Approved0 + Nd}};
-dispatch_jobs(Jobs, Counters, TS, Q, #st{monitors = Mons}) ->
+dispatch_jobs(Jobs, Counters, TS, #queue{stateful = Stf0} = Q,
+	      #st{monitors = Mons, info_f = I}) ->
     Opaque0 = [{counters, Counters}],
-    Nd = lists:foldl(
-	   fun(Job, N) ->
-		   {Pid, Client, Opaque} = job_opaque(Job, Opaque0),
-		   Ref = erlang:monitor(process, Pid),
-		   approve(Client, {Ref, Opaque}),
-		   ets:insert(Mons, {{Pid, Ref}, Q#queue.name}),
-		   N+1
-	   end, 0, Jobs),
+    {Nd, NStf} = lists:foldl(
+		   fun(Job, {N, Stf}) ->
+			   {Pid, Client, Opaque, Stf1} =
+			       job_opaque(Job, Opaque0, Stf, I),
+			   Ref = erlang:monitor(process, Pid),
+			   approve(Client, {Ref, Opaque}),
+			   ets:insert(Mons, {{Pid, Ref}, Q#queue.name}),
+			   {N+1, Stf1}
+		   end, {0, Stf0}, Jobs),
     Approved0 = Q#queue.approved,
     {Nd, Jobs, Q#queue{latest_dispatch = TS,
+		       stateful = NStf,
 		       approved = Approved0 + Nd}}.
+
+update_stateful(undefined, _, _) ->
+    undefined;
+update_stateful({Mod, ModS}, Opaque, I) ->
+    {V, S1} = Mod:next(Opaque, ModS, I),
+    {V, {Mod, S1}}.
+
+ask_stateful(_Req, _, undefined, _) ->
+    badarg;
+ask_stateful(Req, From, {Mod, ModS}, I) ->
+    case Mod:handle_call(Req, From, ModS, I) of
+	{reply, Reply, NewModS} ->
+	    {reply, Reply, {Mod, NewModS}};
+	{noreply, NewModS} ->
+	    {noreply, {Mod, NewModS}}
+    end.
+
 
 spawn_producers(N, Mod, ModS, Counters, I) ->
     spawn_producers(N, Mod, ModS, [{counters, Counters}], I, []).
@@ -1182,10 +1228,21 @@ monitor_jobs(Jobs, QName, Mons) ->
 %%     spawn_monitor(F).
 
 
-job_opaque({_, {Pid,_} = Client}, Opaque) ->
-    {Pid, Client, Opaque};
-job_opaque({_, {Pid,_} = Client, Info}, Opaque) ->
-    {Pid, Client, [{info, Info} | Opaque]}.
+job_opaque({_, {Pid,_} = Client}, Opaque, Stf, I) ->
+    Stf1 = update_stateful(Stf, Opaque, I),
+    {Pid, Client, add_stateful(Stf1, Opaque), stateful_st(Stf1)}.
+%% job_opaque({_, {Pid,_} = Client, Info}, Opaque, Stf, I) ->
+%%     Opaque1 = [{info, Info}|Opaque],
+%%     Stf1 = update_stateful(Stf, Opaque1, I),
+%%     {Pid, Client, add_stateful(Stf1, Opaque1), stateful_st(Stf1)}.
+
+add_stateful(undefined, Opaque) ->
+    Opaque;
+add_stateful({V, _}, Opaque) ->
+    [{info, V}|Opaque].
+
+stateful_st(undefined) -> undefined;
+stateful_st({_, St}) -> St.
 
 
 update_counters(_, [], S) -> S;
@@ -1412,10 +1469,11 @@ select_queue(Type, _, #st{q_select = M, q_select_st = MS, info_f = I} = S) ->
 %% The callback module must implement the functions below.
 %%
 q_new(Opts) ->
-    [Name, Mod, Type, MaxTime, MaxSize] = 
+    [Name, Mod, Type, Stateful, MaxTime, MaxSize] = 
         [get_value(K, Opts, Def) || {K, Def} <- [{name, undefined},
                                                  {mod , jobs_queue},
 						 {type, fifo},
+						 {stateful, undefined},
                                                  {max_time, undefined},
                                                  {max_size, undefined}]],
     Q0 = #queue{name = Name,
@@ -1423,13 +1481,14 @@ q_new(Opts) ->
 		type = Type,
 		max_time = MaxTime,
 		max_size = MaxSize},
+    Q1 = Q0#queue{stateful = init_stateful(Stateful, Q0)},
     case Type of
 	{producer, F} ->
-	    init_producer(F, Opts, Q0);
+	    init_producer(F, Opts, Q1);
 	    %% Q0#queue{type = #producer{f    = F}};
-	{action  , A} -> Q0#queue{type = #action  {a    = A}};
+	{action  , A} -> Q1#queue{type = #action  {a    = A}};
 	_ ->
-	    #queue{} = q_new(Opts, Q0, Mod)
+	    #queue{} = q_new(Opts, Q1, Mod)
     end.
 
 q_new(Options, Q, Mod) ->
@@ -1440,21 +1499,28 @@ queue_options(Opts, #queue{type = #passive{type = T}}) ->
 queue_options(Opts, _) ->
     Opts.
 
+init_stateful(undefined, _) ->
+    undefined;
+init_stateful(F, Q) ->
+    {Mod, Args} = init_f(F, jobs_stateful_simple),
+    ModS = Mod:init(Args, jobs_info:pp(Q)),
+    {Mod, ModS}.
+
+init_f(Type, DefMod) ->
+    case Type of
+	F when is_function(F, 0); is_function(F, 2) ->
+	    {DefMod, F};
+	{M,F,A} ->
+	    {DefMod, {M,F,A}};
+	{M, A} when is_atom(M) ->
+	    {M, A}
+    end.
+
 init_producer(Type, _Opts, Q) ->
-    {Mod, Args} =
-        case Type of
-            F when is_function(F, 0); is_function(F, 2) ->
-                {jobs_prod_simple, F};
-            {M,F,A} ->
-                {jobs_prod_simple, {M,F,A}};
-            {M, A} when is_atom(M) ->
-                {M, A}
-        end,
+    {Mod, Args} = init_f(Type, jobs_prod_simple),
     ModS = Mod:init(Args, jobs_info:pp(Q)),
     Q#queue{type = #producer{mod = Mod,
                              state = ModS}}.
-
-
 
 q_all     (#queue{mod = Mod} = Q)     -> Mod:all     (Q).
 q_timedout(#queue{mod = Mod} = Q)     -> Mod:timedout(Q).
