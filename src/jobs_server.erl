@@ -294,7 +294,21 @@ expand_opts_([]) ->
     [].
 
 
+standard_rate(R) when is_integer(R), R >= 0 ->
+    [{regulators,
+      [{rate,
+	[{limit, R},
+	 {modifiers, standard_modifiers()}]
+       }]
+     }].
 
+standard_counter(N) when is_integer(N), N >= 0 ->
+    [{regulators,
+      [{counter,
+	[{limit, N},
+	 {modifiers, standard_modifiers()}]
+       }]
+     }].
 
 -spec standard_modifiers() -> [q_modifier(),...].
 %%
@@ -338,19 +352,9 @@ init_queues(Qs, S) ->
 	      end, Qs).
 
 init_queue({Name, standard_rate, R}, S) when is_integer(R), R > 0 ->
-    init_queue({Name, [{regulators,
-                        [{rate,
-                          [{limit, R},
-                           {modifiers, standard_modifiers()}]
-                         }]
-                       }]}, S);
+    init_queue({Name, standard_rate(R)}, S);
 init_queue({Name, standard_counter, N}, S) when is_integer(N), N > 0 ->
-    init_queue({Name, [{regulators,
-                        [{counter,
-                          [{limit, N},
-                           {modifiers, standard_modifiers()}]
-                         }]
-                       }]}, S);
+    init_queue({Name, standard_counter(N)}, S);
 init_queue({Name, passive, Opts}, S) ->
     init_queue({Name, [{type, {passive, fifo}} | Opts]}, S);
 init_queue({Name, Action}, _S) when Action==approve; Action==reject ->
@@ -371,7 +375,7 @@ init_queue({Name, Opts0}, S) when is_list(Opts0) ->
 				   false -> {R, [X|O]}
 			       end;
 			  (X, {R, O}) -> {R, [X|O]}
-		       end, {[], []}, Opts0),
+		       end, {[], []}, normalize_options(Opts0)),
     [ChkI, Regs] =
         [get_value(K,Opts,D) ||
             {K, D} <- [{check_interval,undefined},
@@ -379,6 +383,30 @@ init_queue({Name, Opts0}, S) when is_list(Opts0) ->
     Q0 = q_new([{name,Name}|Opts]),
     Q1 = init_regulators(Regs, Q0#queue{check_interval = ChkI}),
     calculate_check_interval(Q1, S).
+
+normalize_options(Opts) ->
+    merge_regulators(
+      lists:flatmap(
+	fun({standard_rate, R}) when is_integer(R), R >= 0 ->
+		standard_rate(R);
+	   ({standard_counter, C}) when is_integer(C), C >= 0 ->
+		standard_counter(C);
+	   ({producer, F}) ->
+		[{type, {producer, F}}];
+	   ({K, V}) ->
+		[{K, V}]
+	end, Opts)).
+
+merge_regulators(Opts) ->
+    merge_regulators(lists:keytake(regulators, 1, Opts), Opts, []).
+
+merge_regulators(false, Opts, []) ->
+    Opts;
+merge_regulators(false, Opts, Regs) ->
+    [{regulators, Regs}|Opts];
+merge_regulators({value, {regulators, Rs}, Opts}, _, Acc) ->
+    merge_regulators(lists:keytake(regulators, 1, Opts), Opts,
+		     Acc ++ Rs).
 
 calculate_check_interval(#queue{regulators = Rs,
 				check_interval = undefined} = Q, S) ->
@@ -627,6 +655,7 @@ i_handle_call({set_modifiers, Modifiers}, _, #st{queues     = Qs,
 i_handle_call({add_queue, Name, Options}, _, #st{queues = Qs} = S) ->
     false = get_queue(Name, Qs),
     NewQueues = init_queues([{Name, Options}], S),
+    revisit_queue(Name),
     {reply, ok, lift_counters(S#st{queues = Qs ++ NewQueues})};
 i_handle_call({delete_queue, Name}, _, #st{queues = Qs} = S) ->
     case get_queue(Name, Qs) of
@@ -634,7 +663,11 @@ i_handle_call({delete_queue, Name}, _, #st{queues = Qs} = S) ->
             {reply, false, S};
         #queue{} = Q ->
             %% for now, let's be very brutal
-            [reject(Client) || {_, Client} <- q_all(Q)],
+	    case Q of
+		#queue{st = undefined} -> ok;
+		_ ->
+		    [reject(Client) || {_, Client} <- q_all(Q)]
+	    end,
             q_delete(Q),
             {reply, true, S#st{queues = lists:keydelete(Name,#queue.name,Qs)}}
     end;
@@ -1058,6 +1091,13 @@ cr_increment(_ , Il) when is_integer(Il) -> Il.
 
 check_rr(undefined, _, _) ->
     0;
+check_rr(I, _, 0) ->
+    %% initial dispatch
+    if I > 0 ->
+	    1;
+       true ->
+	    0
+    end;
 check_rr(I, TS, TL) when TS > TL, I > 0 ->
     trunc((TS - TL)/(I*1000)).
 
@@ -1383,9 +1423,14 @@ q_in(TS, From, #queue{mod = Mod, oldest_job = OJ} = Q) ->
 %%
 %% Calculate the delay (in ms) until queue is checked again.
 %%
+next_time(TS, #queue{type = #producer{}} = Q) ->
+    next_time_(TS, Q);
+next_time(_, #queue{type = #passive{}}) -> undefined;
 next_time(_TS, #queue{oldest_job = undefined}) ->
     %% queue is empty
     undefined;
+next_time(TS, Q) ->
+    next_time_(TS, Q).
 %% next_time(TS, #queue{check_interval = infinity,
 %% 		      max_time = MaxT,
 %% 		      oldest_job = Oldest}) ->
@@ -1395,10 +1440,10 @@ next_time(_TS, #queue{oldest_job = undefined}) ->
 %% 	    %% timestamps are us, timeouts need to be in ms
 %% 	    erlang:max(0, MaxT - ((TS - Oldest) div 1000))
 %%     end;
-next_time(TS, #queue{latest_dispatch = TS1,
-		     check_interval = I0,
-		     max_time = MaxT,
-		     oldest_job = Oldest}) ->
+next_time_(TS, #queue{latest_dispatch = TS1,
+		      check_interval = I0,
+		      max_time = MaxT,
+		      oldest_job = Oldest}) ->
     I = case I0 of
 	    _ when is_number(I0) -> I0;
 	    infinity -> undefined;
