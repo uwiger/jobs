@@ -123,6 +123,9 @@ run(Type, Fun) when is_function(Fun, 1) ->
 
 -spec done(reg_obj()) -> ok.
 %%
+done({undefined, _}) ->
+    %% no monitoring on this job (e.g. from a {action, approve} queue)
+    ok;
 done(Opaque) ->
     gen_server:cast(?MODULE, {done, self(), del_info(Opaque)}).
 
@@ -408,6 +411,10 @@ normalize_options(Opts) ->
 		[{type, {producer, F}}];
 	   (passive) ->
 		[{type, {passive, fifo}}];
+	   (A) when A==approve; A==reject ->
+		[{type, {action, approve}}];
+	   ({action, A}) when A==approve; A==reject ->
+		[{type, {action, approve}}];
 	   ({K, V}) ->
 		[{K, V}]
 	end, Opts)).
@@ -618,8 +625,22 @@ i_handle_call({ask, Type}, From, #st{queues = Qs} = S) ->
     TS = timestamp(),
     {Qname, S1} = select_queue(Type, TS, S),
     case get_queue(Qname, Qs) of
-        #queue{type = #action{a = approve}} -> approve(From, []), {noreply, S1};
-	#queue{type = #action{a = reject}} ->  reject(From)     , {noreply, S1};
+        #queue{type = #action{a = approve}, stateful = undefined,
+	       approved = Approved} = Q ->
+	    S2 = S1#st{queues = lists:keyreplace(
+				  Qname, #queue.name, Qs,
+				  Q#queue{approved = Approved + 1})},
+	    approve(From, {undefined, []}), {noreply, S2};
+        #queue{type = #action{a = approve}, stateful = Stf,
+	       approved = Approved} = Q ->
+	    {Val, Stf1} = update_stateful(Stf, [], S1#st.info_f),
+	    S2 = S1#st{queues = lists:keyreplace(
+				  Qname, #queue.name, Qs,
+				  Q#queue{stateful = Stf1,
+					  approved = Approved + 1})},
+	    approve(From, {undefined, [{info, Val}]}), {noreply, S2};
+	#queue{type = #action{a = reject}} ->
+	    reject(From), {noreply, S1};
 	#queue{type = #producer{}} ->
 	    {reply, badarg, S1};
         #queue{} = Q ->
