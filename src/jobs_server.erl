@@ -1016,7 +1016,8 @@ maybe_cancel_timer(#queue{timer = TRef} = Q) ->
     erlang:cancel_timer(TRef),
     Q#queue{timer = undefined}.
 
-
+check_queue(#queue{type = {action, approve}}, _TS, _S) ->
+    {0, [], []};
 check_queue(#queue{type = #producer{}} = Q, TS, S) ->
     do_check_queue(Q, TS, S);
 check_queue(#queue{} = Q, TS, S) ->
