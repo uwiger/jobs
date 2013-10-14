@@ -1339,8 +1339,10 @@ start_timer(#queue{name = Name} = Q) ->
             Q
     end.
 
+do_send_after(T, Msg) when T > 0 ->
+    erlang:send_after(T, self(), Msg);
 do_send_after(T, Msg) ->
-    erlang:send_after(T, self(), Msg).
+    self() ! Msg.
 
 apply_modifiers(Modifiers, #queue{regulators = Rs} = Q) ->
     Rs1 = [apply_modifiers(Modifiers, R) || R <- Rs],
