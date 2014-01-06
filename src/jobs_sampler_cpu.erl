@@ -1,3 +1,4 @@
+%% -*- erlang-indent-level: 4; indent-tabs-mode: nil -*-
 %%==============================================================================
 %% Copyright 2010 Erlang Solutions Ltd.
 %%
@@ -18,7 +19,7 @@
 %% File    : jobs_sampler_cpu.erl
 %% @author  : Ulf Wiger <ulf.wiger@erlang-solutions.com>
 %% @end
-%% Description : 
+%% Description :
 %%
 %% Created : 15 Jan 2010 by Ulf Wiger <ulf.wiger@erlang-solutions.com>
 %%-------------------------------------------------------------------
@@ -53,7 +54,7 @@ sample(_Timestamp, #st{} = S) ->
                         %% only one cpu
                         U;
                     [_,_|_] ->
-                        %% This is a form of ad-hoc averaging, which tries to 
+                        %% This is a form of ad-hoc averaging, which tries to
                         %% account for the possibility that the application
                         %% loads the cores unevenly.
                         calc_avg_util(Utils)
@@ -70,8 +71,8 @@ calc_avg_util(Utils) ->
             High = [U || U <- Utils,
                          B-U > 20],
             lists:sum(High)/length(High);
-                            {Low,High} ->
-            High+Low/2
+        {Low,High} ->
+            (High+Low)/2
     end.
 
 
@@ -80,7 +81,7 @@ minmax([H|T]) ->
       fun(X, {Min,Max}) ->
               {erlang:min(X,Min), erlang:max(X,Max)}
       end, {H,H}, T).
-                        
+
 
 calc(History, #st{levels = Levels} = St) ->
     L = jobs_sampler:calc(value, Levels, History),
