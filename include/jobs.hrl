@@ -23,6 +23,8 @@
 %% Created : 15 Jan 2010 by Ulf Wiger <ulf.wiger@erlang-solutions.com>
 %%-------------------------------------------------------------------
 
+-export_type([counter/0, reg_obj/0]).
+
 -type job_class() :: any().
 -opaque counter() :: {any(), any()}.
 -opaque reg_obj() :: [counter()].
