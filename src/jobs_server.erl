@@ -1016,7 +1016,8 @@ maybe_cancel_timer(#queue{timer = TRef} = Q) ->
     erlang:cancel_timer(TRef),
     Q#queue{timer = undefined}.
 
-
+check_queue(#queue{type = {action, approve}}, _TS, _S) ->
+    {0, [], []};
 check_queue(#queue{type = #producer{}} = Q, TS, S) ->
     do_check_queue(Q, TS, S);
 check_queue(#queue{} = Q, TS, S) ->
@@ -1338,8 +1339,10 @@ start_timer(#queue{name = Name} = Q) ->
             Q
     end.
 
+do_send_after(T, Msg) when T > 0 ->
+    erlang:send_after(T, self(), Msg);
 do_send_after(T, Msg) ->
-    erlang:send_after(T, self(), Msg).
+    self() ! Msg.
 
 apply_modifiers(Modifiers, #queue{regulators = Rs} = Q) ->
     Rs1 = [apply_modifiers(Modifiers, R) || R <- Rs],
@@ -1545,6 +1548,7 @@ init_producer(Type, _Opts, Q) ->
 
 q_all     (#queue{mod = Mod} = Q)     -> Mod:all     (Q).
 q_timedout(#queue{mod = Mod} = Q)     -> Mod:timedout(Q).
+q_delete  (#queue{mod = undefined})   -> ok;
 q_delete  (#queue{mod = Mod} = Q)     -> Mod:delete  (Q).
 %%
 %q_is_empty(#queue{type = #producer{}}) -> false;
