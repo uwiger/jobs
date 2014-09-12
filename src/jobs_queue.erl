@@ -1,5 +1,5 @@
 %%==============================================================================
-%% Copyright 2010 Erlang Solutions Ltd.
+%% Copyright 2014 Ulf Wiger
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -16,21 +16,21 @@
 
 %%-------------------------------------------------------------------
 %% File    : jobs_queue.erl
-%% @author  : Ulf Wiger <ulf.wiger@erlang-solutions.com>
+%% @author  : Ulf Wiger <ulf@wiger.net>
 %% @end
-%% Description : 
+%% Description :
 %%
-%% Created : 15 Jan 2010 by Ulf Wiger <ulf.wiger@erlang-solutions.com>
+%% Created : 15 Jan 2010 by Ulf Wiger <ulf@wiger.net>
 %%-------------------------------------------------------------------
 %% @doc Default queue behaviour for JOBS (using ordered_set ets).
 %%
-%% This module implements the default queue behaviour for JOBS, and also 
+%% This module implements the default queue behaviour for JOBS, and also
 %% specifies the behaviour itself.
 %% @end
 
 -module(jobs_queue).
--author('ulf.wiger@erlang-solutions.com').
--copyright('Erlang Solutions Ltd.').
+-author('ulf@wiger.net').
+-copyright('Ulf Wiger').
 
 -export([new/2,
          delete/1]).
@@ -71,10 +71,10 @@ behaviour_info(_) ->
 %% @doc Instantiate a new queue.
 %%
 %% Options is the list of options provided when defining the queue.
-%% Q is an initial #queue{} record. It can be used directly by including 
+%% Q is an initial #queue{} record. It can be used directly by including
 %% `jobs/include/jobs.hrl', or by using exprecs-style record accessors in the
 %% module `jobs_info'.
-%% See <a href="http://github.com/esl/parse_trans">parse_trans</a> for more info
+%% See <a href="http://github.com/uwiger/parse_trans">parse_trans</a> for more info
 %% on exprecs. In the `new/2' function, the #queue.st attribute will normally be
 %% used to keep track of the queue data structure.
 %% @end
@@ -111,11 +111,11 @@ delete(#queue{st = #st{table = T}}) ->
 %% @spec in(Timestamp, Job, #queue{}) -> #queue{}
 %% @doc Enqueue a job reference; return the updated queue.
 %%
-%% This puts a job into the queue. The callback function is responsible for 
+%% This puts a job into the queue. The callback function is responsible for
 %% updating the #queue.oldest_job attribute, if needed. The #queue.oldest_job
 %% attribute shall either contain the Timestamp of the oldest job in the queue,
 %% or `undefined' if the queue is empty. It may be noted that, especially in the
-%% fairly trivial case of the `in/3' function, the oldest job would be 
+%% fairly trivial case of the `in/3' function, the oldest job would be
 %% `erlang:min(Timestamp, PreviousOldest)', even if `PreviousOldest == undefined'.
 %% @end
 %%
@@ -168,7 +168,7 @@ info(max_time  , #queue{max_time = T}   ) -> T;
 info(oldest_job, #queue{oldest_job = OJ}) -> OJ;
 info(length    , #queue{st = #st{table = Tab}}) ->
     ets:info(Tab, size).
-    
+
 -spec timedout(#queue{}) -> [] | {[entry()], #queue{}}.
 %% @spec timedout(#queue{}) -> [] | {[Entry], #queue{}}
 %% @doc Return all entries that have been in the queue longer than MaxTime.
@@ -233,7 +233,7 @@ set_oldest_job(#queue{st = #st{table = Tab}} = Q) ->
                  TS
          end,
     Q#queue{oldest_job = OJ}.
-            
+
 
 find_expired(Tab, Now, TO) ->
     find_expired(ets:first(Tab), Tab, Now, TO, []).
@@ -258,8 +258,3 @@ empty(#queue{st = #st{table = T}} = Q) ->
 is_expired(TS, Now, TO) ->
     MS = Now - TS,
     MS > TO.
-
-	
-
-
-

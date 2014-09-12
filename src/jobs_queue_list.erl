@@ -1,5 +1,5 @@
 %%==============================================================================
-%% Copyright 2010 Erlang Solutions Ltd.
+%% Copyright 2014 Ulf Wiger
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -16,16 +16,16 @@
 
 %%-------------------------------------------------------------------
 %% File    : jobs_queue.erl
-%% @author  : Ulf Wiger <ulf.wiger@erlang-solutions.com>
+%% @author  : Ulf Wiger <ulf@wiger.net>
 %% @end
-%% Description : 
+%% Description :
 %%
-%% Created : 15 Jan 2010 by Ulf Wiger <ulf.wiger@erlang-solutions.com>
+%% Created : 15 Jan 2010 by Ulf Wiger <ulf@wiger.net>
 %%-------------------------------------------------------------------
 
 -module(jobs_queue_list).
--author('ulf.wiger@erlang-solutions.com').
--copyright('Erlang Solutions Ltd.').
+-author('ulf@wiger.net').
+-copyright('Ulf Wiger').
 
 -export([new/2,
          delete/1]).
@@ -111,7 +111,7 @@ info(max_time  , #queue{max_time = T}   ) -> T;
 info(oldest_job, #queue{oldest_job = OJ}) -> OJ;
 info(length    , #queue{st = L}) ->
     length(L).
-    
+
 -spec timedout(#queue{}) -> {[entry()], #queue{}}.
 %%
 %% Return all entries that have been in the queue longer than MaxTime.
@@ -124,7 +124,7 @@ timedout(_ , #queue{oldest_job = undefined}) -> [];
 timedout(TO, #queue{st = L} = Q) ->
     Now = jobs_server:timestamp(),
     {Left, Timedout} = lists:splitwith(fun({TS,_}) ->
-                                               not(is_expired(TS,Now,TO)) 
+                                               not(is_expired(TS,Now,TO))
                                        end, L),
     OJ = get_oldest_job(Left),
     {Timedout, Q#queue{oldest_job = OJ, st = Left}}.
@@ -148,8 +148,3 @@ empty(#queue{} = Q) ->
 is_expired(TS, Now, TO) ->
     MS = Now - TS,
     MS > TO.
-
-	
-
-
-

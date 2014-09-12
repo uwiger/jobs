@@ -32,7 +32,7 @@ recognised configuration parameters.
 #### <a name="{config,_Filename}">{config, Filename}</a> ####
 
 
-Evaluate a file using [`//kernel/file:script/1`](/Users/uwiger/FL/git/kernel/doc/file.md#script-1), treating the data
+Evaluate a file using [`//kernel/file:script/1`](/Users/uwiger/uw/me/kernel/doc/file.md#script-1), treating the data
 returned from the script as a list of configuration options.
 
 

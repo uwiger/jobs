@@ -1,5 +1,5 @@
 %%==============================================================================
-%% Copyright 2010 Erlang Solutions Ltd.
+%% Copyright 2014 Ulf Wiger
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
 %% limitations under the License.
 %%==============================================================================
 
-@copyright 2010 Erlang Solutions Ltd.
+@copyright 2014 Ulf Wiger
 @version 0.1
 @title jobs - a Job scheduler for load regulation
 
@@ -26,7 +26,7 @@ JOBS
 Jobs is a job scheduler for load regulation of Erlang applications.
 It provides a queueing framework where each queue can be configured
 for throughput rate, credit pool and feedback compensation.
-Queues can be added and modified at runtime, and customizable 
+Queues can be added and modified at runtime, and customizable
 "samplers" propagate load status across all nodes in the system.
 
 Specifically, jobs provides three features:
@@ -41,7 +41,7 @@ Specifically, jobs provides three features:
   LIFO order? How many jobs can the queue take before it is full? Is
   there a deadline after which jobs should be rejected. When we hit
   the queue limits we reject the job. This provides a feedback
-  mechanism on the client of the queue so you can take action.  
+  mechanism on the client of the queue so you can take action.
 * Sampling and dampening: Periodic samples of the Erlang VM can
   provide information about the health of the system in general. If we
   have high CPU load or high memory usage, we apply dampening to the
@@ -57,12 +57,12 @@ To be done
 Prerequisites
 -------------
 This application requires 'exprecs'.
-The 'exprecs' module is part of http://github.com/esl/parse_trans
+The 'exprecs' module is part of http://github.com/uwiger/parse_trans
 
 Contribute
 ----------
 For issues, comments or feedback please [create an issue!] [1]
 
-[1]: http://github.com/esl/jobs/issues "jobs issues"
+[1]: http://github.com/uwiger/jobs/issues "jobs issues"
 
 @end

@@ -1,5 +1,5 @@
 %%==============================================================================
-%% Copyright 2010 Erlang Solutions Ltd.
+%% Copyright 2014 Ulf Wiger
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -16,12 +16,12 @@
 
 %%-------------------------------------------------------------------
 %% File    : jobs.erl
-%% @author  : Ulf Wiger <ulf.wiger@erlang-solutions.com>
+%% @author  : Ulf Wiger <ulf@wiger.net>
 %% @doc
 %% This is the public API of the JOBS framework.
 %%
 %% @end
-%% Created : 15 Jan 2010 by Ulf Wiger <ulf.wiger@erlang-solutions.com>
+%% Created : 15 Jan 2010 by Ulf Wiger <ulf@wiger.net>
 %%-------------------------------------------------------------------
 -module(jobs).
 
@@ -52,7 +52,7 @@
 
 %% @spec ask(Type) -> {ok, Opaque} | {error, Reason}
 %% @doc Asks permission to run a job of Type. Returns when permission granted.
-%% 
+%%
 %% The simplest way to have jobs regulated is to spawn a request per job.
 %% The process should immediately call this function, and when granted
 %% permission, execute the job, and then terminate.
@@ -130,7 +130,7 @@ delete_queue(Name) ->
 
 %% @spec ask_queue(QueueName, Request) -> Reply
 %% @doc Sends a synchronous request to a specific queue.
-%% 
+%%
 %% This function is mainly intended to be used for back-end processes that act
 %% as custom extensions to the load regulator itself. It should not be used by
 %% regular clients. Sophisticated queue behaviours could export gen_server-like

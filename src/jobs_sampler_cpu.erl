@@ -1,6 +1,6 @@
 %% -*- erlang-indent-level: 4; indent-tabs-mode: nil -*-
 %%==============================================================================
-%% Copyright 2010 Erlang Solutions Ltd.
+%% Copyright 2014 Ulf Wiger
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -17,11 +17,11 @@
 
 %%-------------------------------------------------------------------
 %% File    : jobs_sampler_cpu.erl
-%% @author  : Ulf Wiger <ulf.wiger@erlang-solutions.com>
+%% @author  : Ulf Wiger <ulf@wiger.net>
 %% @end
 %% Description :
 %%
-%% Created : 15 Jan 2010 by Ulf Wiger <ulf.wiger@erlang-solutions.com>
+%% Created : 15 Jan 2010 by Ulf Wiger <ulf@wiger.net>
 %%-------------------------------------------------------------------
 -module(jobs_sampler_cpu).
 -behaviour(jobs_sampler).

@@ -11,7 +11,7 @@ __This module defines the `jobs_queue` behaviour.__
 <br></br>
  Required callback functions: `new/2`, `delete/1`, `in/3`, `peek/1`, `out/2`, `all/1`, `info/2`.
 
-__Authors:__ : Ulf Wiger ([`ulf.wiger@erlang-solutions.com`](mailto:ulf.wiger@erlang-solutions.com)).
+__Authors:__ : Ulf Wiger ([`ulf@wiger.net`](mailto:ulf@wiger.net)).
 <a name="description"></a>
 
 ## Description ##
@@ -144,7 +144,7 @@ Options is the list of options provided when defining the queue.
 Q is an initial #queue{} record. It can be used directly by including
 `jobs/include/jobs.hrl`, or by using exprecs-style record accessors in the
 module `jobs_info`.
-See [parse_trans](http://github.com/esl/parse_trans) for more info
+See [parse_trans](http://github.com/uwiger/parse_trans) for more info
 on exprecs. In the `new/2` function, the #queue.st attribute will normally be
 used to keep track of the queue data structure.
 <a name="out-2"></a>

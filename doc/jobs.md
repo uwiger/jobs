@@ -8,7 +8,7 @@
 
 
 This is the public API of the JOBS framework.
-__Authors:__ : Ulf Wiger ([`ulf.wiger@erlang-solutions.com`](mailto:ulf.wiger@erlang-solutions.com)).
+__Authors:__ : Ulf Wiger ([`ulf@wiger.net`](mailto:ulf@wiger.net)).
 <a name="description"></a>
 
 ## Description ##

@@ -8,7 +8,7 @@ __This module defines the `jobs_sampler` behaviour.__
 <br></br>
  Required callback functions: `init/2`, `sample/2`, `handle_msg/3`, `calc/2`.
 
-__Authors:__ : Ulf Wiger ([`ulf.wiger@erlang-solutions.com`](mailto:ulf.wiger@erlang-solutions.com)).
+__Authors:__ : Ulf Wiger ([`ulf@wiger.net`](mailto:ulf@wiger.net)).
 <a name="index"></a>
 
 ## Function Index ##

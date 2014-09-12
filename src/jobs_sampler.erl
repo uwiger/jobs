@@ -1,5 +1,5 @@
 %%==============================================================================
-%% Copyright 2010 Erlang Solutions Ltd.
+%% Copyright 2014 Ulf Wiger
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -16,11 +16,11 @@
 
 %%-------------------------------------------------------------------
 %% File    : jobs_sampler.erl
-%% @author  : Ulf Wiger <ulf.wiger@erlang-solutions.com>
+%% @author  : Ulf Wiger <ulf@wiger.net>
 %% @end
-%% Description : 
+%% Description :
 %%
-%% Created : 15 Jan 2010 by Ulf Wiger <ulf.wiger@erlang-solutions.com>
+%% Created : 15 Jan 2010 by Ulf Wiger <ulf@wiger.net>
 %%-------------------------------------------------------------------
 -module(jobs_sampler).
 
@@ -83,25 +83,25 @@ tell_sampler(P, Msg) ->
 
 %% @spec subscribe() -> ok
 %% @doc Subscribes to feedback indicator information
-%% 
-%% This function allows a process to receive the same information as the 
+%%
+%% This function allows a process to receive the same information as the
 %% jobs_server any time the information changes.
 %%
 %% The notifications are delivered on the format `{jobs_indicators, Info}',
-%% where 
+%% where
 %% <pre>
 %% Info :: [{IndicatorName, LocalValue, Remote}]
 %%  Remote :: [{NodeName, Value}]
 %% </pre>
 %%
 %% This information could be used e.g. to aggregate the information and generate
-%% new sampler information (which could be passed to a sampler plugin using 
+%% new sampler information (which could be passed to a sampler plugin using
 %% {@link tell_sampler/2}, or to a specific queue using {@link jobs:ask_queue/2}.
 %%
 subscribe() ->
     gen_server:call(?MODULE, subscribe).
 
-%% 
+%%
 end_subscription() ->
     gen_server:call(?MODULE, end_subscription).
 
@@ -148,7 +148,7 @@ handle_call(end_subscription, {Pid,_}, #state{subscribers = Subs} = St) ->
 	    erlang:demonitor(MRef),
 	    {reply, ok, St#state{subscribers = Subs -- [Found]}}
     end.
-		
+
 
 handle_info({?MODULE, update}, #state{modified = IsModified} = S) ->
     case IsModified of
@@ -292,7 +292,7 @@ report_global(#state{modifiers = Local} = S) ->
 
 calc_modifiers(#state{samplers = Samplers} = S) ->
     S1 = calc_modifiers(Samplers, S),
-    case S1#state.modified of 
+    case S1#state.modified of
 	true ->
 	    erlang:send_after(S#state.update_delay, self(), {?MODULE,update});
 	false ->

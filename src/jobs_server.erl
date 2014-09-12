@@ -1,5 +1,5 @@
 %%==============================================================================
-%% Copyright 2010 Erlang Solutions Ltd.
+%% Copyright 2014 Ulf Wiger
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -16,11 +16,11 @@
 
 %%-------------------------------------------------------------------
 %% File    : jobs_server.erl
-%% @author  : Ulf Wiger <ulf.wiger@erlang-solutions.com>
+%% @author  : Ulf Wiger <ulf@wiger.net>
 %% @end
-%% Description : 
+%% Description :
 %%
-%% Created : 15 Jan 2010 by Ulf Wiger <ulf.wiger@erlang-solutions.com>
+%% Created : 15 Jan 2010 by Ulf Wiger <ulf@wiger.net>
 %%-------------------------------------------------------------------
 -module(jobs_server).
 -behaviour(gen_server).
@@ -803,7 +803,7 @@ i_handle_call({ask_queue, QName, Req}, From, #st{queues = Qs} = S) ->
 						  Q#queue{stateful = Stf1})}
 		end,
 	    %% We don't catch errors; this is done at the level above.
-	    %% One possible error is that the queue module doesn't have a 
+	    %% One possible error is that the queue module doesn't have a
 	    %% handle_call/3 callback.
 	    case ask_stateful(Req, From, Stf, S#st.info_f) of
 		badarg -> {reply, badarg, S};
@@ -1289,7 +1289,7 @@ restore_counter({C, I}, {Revisit, #st{counters = Counters} = S}) ->
     CR1 = CR#cr{value = Val - I},
     Counters1 = lists:keyreplace(C, #cr.name, Counters, CR1),
     S1 = S#st{counters = Counters1},
-    {union(Qs, Revisit), S1}. 
+    {union(Qs, Revisit), S1}.
 
 union(L1, L2) ->
     (L1 -- L2) ++ L2.
@@ -1341,8 +1341,9 @@ start_timer(#queue{name = Name} = Q) ->
 
 do_send_after(T, Msg) when T > 0 ->
     erlang:send_after(T, self(), Msg);
-do_send_after(T, Msg) ->
-    self() ! Msg.
+do_send_after(_, Msg) ->
+    self() ! Msg,
+    undefined.
 
 apply_modifiers(Modifiers, #queue{regulators = Rs} = Q) ->
     Rs1 = [apply_modifiers(Modifiers, R) || R <- Rs],
@@ -1452,7 +1453,7 @@ queue_job(TS, From, #queue{max_size = MaxSz} = Q, S) ->
             case q_timedout(Q) of
                 [] ->
                     reject(From),
-                    S;
+                    {Q, S};
                 {OldJobs, Q1} ->
                     [timeout(J) || J <- OldJobs],
                     %% update_queue(q_in(TS, From, Q1), S)
@@ -1493,7 +1494,7 @@ select_queue(Type, _, #st{q_select = M, q_select_st = MS, info_f = I} = S) ->
 %% The callback module must implement the functions below.
 %%
 q_new(Opts) ->
-    [Name, Mod, Type, Stateful, MaxTime, MaxSize] = 
+    [Name, Mod, Type, Stateful, MaxTime, MaxSize] =
         [get_value(K, Opts, Def) || {K, Def} <- [{name, undefined},
                                                  {mod , jobs_queue},
 						 {type, fifo},
@@ -1676,4 +1677,3 @@ get_first_value(K, [{K, V}|_], _) ->
     V;
 get_first_value(_, [], Default) ->
     Default.
-
