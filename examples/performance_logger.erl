@@ -1,5 +1,5 @@
 %%==============================================================================
-%% Copyright 2011 Erlang Solutions Ltd.
+%% Copyright 2014 Ulf Wiger
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -127,7 +127,7 @@ handle_cast({start_recording, DataSpec}, State) ->
                           data_spec = [{fun cpu_load/0, "CPULoad", identity},
                                        {fun memory_use/0, "MemoryUse", identity} | DataSpec],
                           timer = TRef}};
-                          
+
 handle_cast(end_recording, State) ->
     timer:cancel(State#state.timer),
     {noreply, State};
@@ -206,7 +206,7 @@ save_data(Fn_1, Fn = {Timestamp, _}, Result, Data, File) ->
     Out = compute_sample_value(Fn_1, Fn, Result, Data),
     file:write(File, sample_to_string({Timestamp, Out})),
     save_data(Fn, next_element(Fn), Out, Data, File).
-               
+
 compute_sample_value({_, Fn_1}, {_, Fn}, Result, Data) ->
     zipwith4(fun(Cntr_prev, Cntr, Cntr_local, {_, _, CntrType}) ->
                      case CntrType of
@@ -227,7 +227,7 @@ first_element() ->
 
 next_element({Key, _Value}) ->
     case ets:next(?PFL_ETS_NAME, Key) of
-        '$end_of_table' -> end_of_data;         
+        '$end_of_table' -> end_of_data;
         NextKey -> [WhatINeed] = ets:lookup(?PFL_ETS_NAME, NextKey),
                    WhatINeed
     end.

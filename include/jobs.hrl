@@ -1,5 +1,5 @@
 %%==============================================================================
-%% Copyright 2010 Erlang Solutions Ltd.
+%% Copyright 2014 Ulf Wiger
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -16,11 +16,11 @@
 
 %%-------------------------------------------------------------------
 %% File    : jobs.hrl
-%% @author  : Ulf Wiger <ulf.wiger@erlang-solutions.com>
+%% @author  : Ulf Wiger <ulf@wiger.net>
 %% @end
 %% Description :
 %%
-%% Created : 15 Jan 2010 by Ulf Wiger <ulf.wiger@erlang-solutions.com>
+%% Created : 15 Jan 2010 by Ulf Wiger <ulf@wiger.net>
 %%-------------------------------------------------------------------
 
 -export_type([counter/0, reg_obj/0]).
@@ -149,8 +149,8 @@
 -define(COUNTER_SAMPLE_INTERVAL, infinity).
 
 %% The jobs_server may, under certain circumstances, generate error reports
-%% This value, in microseconds, defines the highest frequency with which 
-%% it can issue error reports. Any reports that would cause this limit to 
+%% This value, in microseconds, defines the highest frequency with which
+%% it can issue error reports. Any reports that would cause this limit to
 %% be exceeded are simply discarded.
 %
 -define(MAX_ERROR_RPT_INTERVAL_US, 1000000).
