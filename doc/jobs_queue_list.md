@@ -67,9 +67,7 @@ job() = {pid(), reference()}
 <pre><code>
 all(Queue::#queue{}) -&gt; [<a href="#type-entry">entry()</a>]
 </code></pre>
-
-<br></br>
-
+<br />
 
 
 <a name="delete-1"></a>
@@ -94,9 +92,7 @@ all(Queue::#queue{}) -&gt; [<a href="#type-entry">entry()</a>]
 <pre><code>
 in(TS::<a href="#type-timestamp">timestamp()</a>, Job::<a href="#type-job">job()</a>, Queue::#queue{}) -&gt; #queue{}
 </code></pre>
-
-<br></br>
-
+<br />
 
 
 <a name="info-2"></a>
@@ -107,9 +103,7 @@ in(TS::<a href="#type-timestamp">timestamp()</a>, Job::<a href="#type-job">job()
 <pre><code>
 info(X1::<a href="#type-info_item">info_item()</a>, Queue::#queue{}) -&gt; any()
 </code></pre>
-
-<br></br>
-
+<br />
 
 
 <a name="is_empty-1"></a>
@@ -120,9 +114,7 @@ info(X1::<a href="#type-info_item">info_item()</a>, Queue::#queue{}) -&gt; any()
 <pre><code>
 is_empty(Queue::#queue{}) -&gt; boolean()
 </code></pre>
-
-<br></br>
-
+<br />
 
 
 <a name="new-2"></a>
@@ -140,9 +132,7 @@ is_empty(Queue::#queue{}) -&gt; boolean()
 <pre><code>
 out(N::integer(), Queue::#queue{}) -&gt; {[<a href="#type-entry">entry()</a>], #queue{}}
 </code></pre>
-
-<br></br>
-
+<br />
 
 
 <a name="peek-1"></a>
@@ -167,9 +157,7 @@ out(N::integer(), Queue::#queue{}) -&gt; {[<a href="#type-entry">entry()</a>], #
 <pre><code>
 timedout(Queue::#queue{}) -&gt; {[<a href="#type-entry">entry()</a>], #queue{}}
 </code></pre>
-
-<br></br>
-
+<br />
 
 
 <a name="timedout-2"></a>

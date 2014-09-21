@@ -7,9 +7,7 @@
 
 
 Default queue behaviour for JOBS (using ordered_set ets).
-__This module defines the `jobs_queue` behaviour.__
-<br></br>
- Required callback functions: `new/2`, `delete/1`, `in/3`, `peek/1`, `out/2`, `all/1`, `info/2`.
+__This module defines the `jobs_queue` behaviour.__<br /> Required callback functions: `new/2`, `delete/1`, `in/3`, `peek/1`, `out/2`, `all/1`, `info/2`.
 
 __Authors:__ : Ulf Wiger ([`ulf@wiger.net`](mailto:ulf@wiger.net)).
 <a name="description"></a>
@@ -38,9 +36,7 @@ specifies the behaviour itself.<a name="index"></a>
 <pre><code>
 all(Queue::#queue{}) -&gt; [JobEntry]
 </code></pre>
-
-<br></br>
-
+<br />
 
 Return all the job entries in the queue, not removing them from the queue.
 
@@ -59,9 +55,7 @@ Return all the job entries in the queue, not removing them from the queue.
 <pre><code>
 delete(Queue::#queue{}) -&gt; any()
 </code></pre>
-
-<br></br>
-
+<br />
 
 
 Queue is being deleted; remove any external data structures.
@@ -84,9 +78,7 @@ to get rid of it.
 <pre><code>
 in(TS::Timestamp, Job, Queue::#queue{}) -&gt; #queue{}
 </code></pre>
-
-<br></br>
-
+<br />
 
 
 Enqueue a job reference; return the updated queue.
@@ -119,9 +111,7 @@ Return information about the queue.
 <pre><code>
 is_empty(Queue::#queue{}) -&gt; boolean()
 </code></pre>
-
-<br></br>
-
+<br />
 
 
 <a name="new-2"></a>
@@ -132,9 +122,7 @@ is_empty(Queue::#queue{}) -&gt; boolean()
 <pre><code>
 new(Options, Q::#queue{}) -&gt; #queue{}
 </code></pre>
-
-<br></br>
-
+<br />
 
 
 Instantiate a new queue.
@@ -155,9 +143,7 @@ used to keep track of the queue data structure.
 <pre><code>
 out(N::integer(), Queue::#queue{}) -&gt; {[Entry], #queue{}}
 </code></pre>
-
-<br></br>
-
+<br />
 
 
 Dequeue a batch of N jobs; return the modified queue.
@@ -173,9 +159,7 @@ especially if the queue becomes empty.
 <pre><code>
 peek(Queue::#queue{}) -&gt; JobEntry | undefined
 </code></pre>
-
-<br></br>
-
+<br />
 
 Looks at the first item in the queue, without removing it.
 
@@ -194,9 +178,7 @@ A representation of a queue which can be inspected
 <pre><code>
 timedout(Queue::#queue{}) -&gt; [] | {[Entry], #queue{}}
 </code></pre>
-
-<br></br>
-
+<br />
 
 
 Return all entries that have been in the queue longer than MaxTime.

@@ -38,6 +38,7 @@
 
 %% Config API
 -export([add_queue/2,
+	 modify_queue/2,
          delete_queue/1,
          add_counter/2,
          modify_counter/2,
@@ -148,6 +149,11 @@ dequeue(Type, N) when N==infinity; is_integer(N), N > 0 ->
 %%
 add_queue(Name, Options) ->
     call(?SERVER, {add_queue, Name, Options}).
+
+-spec modify_queue(queue_name(), [option()]) -> ok.
+%%
+modify_queue(Name, Options) ->
+    call(?SERVER, {modify_queue, Name, Options}).
 
 -spec delete_queue(queue_name()) -> ok.
 delete_queue(Name) ->
@@ -694,6 +700,22 @@ i_handle_call({add_queue, Name, Options}, _, #st{queues = Qs} = S) ->
     NewQueues = init_queues([{Name, Options}], S),
     revisit_queue(Name),
     {reply, ok, lift_counters(S#st{queues = Qs ++ NewQueues})};
+i_handle_call({modify_queue, Name, Options}, _, #st{queues = Qs} = S) ->
+    case get_queue(Name, Qs) of
+	false ->
+	    {reply, {error, not_found}, S};
+	#queue{} = Q ->
+	    Q1 = lists:foldl(
+		   fun({max_size, Sz}, Qx) when is_integer(Sz), Sz >= 0;
+						Sz==undefined ->
+			   Qx#queue{max_size = Sz};
+		      ({max_time, T}, Qx) when is_integer(T), T >= 0;
+					       T==undefined ->
+			   Qx#queue{max_time = T}
+		   end, Q, Options),
+	    revisit_queue(Name),
+	    {reply, ok, update_queue(Q1, S)}
+    end;
 i_handle_call({delete_queue, Name}, _, #st{queues = Qs} = S) ->
     case get_queue(Name, Qs) of
         false ->
@@ -897,7 +919,9 @@ do_get_queue_info(rate_limit, #queue{regulators = Rs}) ->
 	    Limit;
 	false ->
 	    undefined
-    end.
+    end;
+do_get_queue_info(Item, Q) ->
+    jobs_info:'#get-queue'(Item, Q).
 
 get_queue(Name, Qs) ->
     lists:keyfind(Name, #queue.name, Qs).

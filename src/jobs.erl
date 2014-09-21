@@ -37,6 +37,7 @@
 
 %% Configuration API
 -export([add_queue/2,
+	 modify_queue/2,
          delete_queue/1,
          info/1,
          queue_info/1,
@@ -119,6 +120,15 @@ job_info({_, Opaque}) ->
 %%
 add_queue(Name, Options) ->
     jobs_server:add_queue(Name, Options).
+
+%% @spec modify_queue(Name::any(), Options::[{Key,Value}]) ->
+%%   ok | {error, Reason}
+%% @doc Modifies queue parameters of existing queue.
+%%
+%% The queue parameters that can be modified are `max_size' and `max_time'.
+%% @end
+modify_queue(Name, Options) ->
+    jobs_server:modify_queue(Name, Options).
 
 %% @spec delete_queue(Name) -> boolean()
 %% @doc Deletes the named queue from the load regulator on the current node.

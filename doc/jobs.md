@@ -17,7 +17,7 @@ __Authors:__ : Ulf Wiger ([`ulf@wiger.net`](mailto:ulf@wiger.net)).
 ## Function Index ##
 
 
-<table width="100%" border="1" cellspacing="0" cellpadding="2" summary="function index"><tr><td valign="top"><a href="#add_counter-2">add_counter/2</a></td><td>Adds a named counter to the load regulator on the current node.</td></tr><tr><td valign="top"><a href="#add_group_rate-2">add_group_rate/2</a></td><td>Adds a group rate regulator to the load regulator on the current node.</td></tr><tr><td valign="top"><a href="#add_queue-2">add_queue/2</a></td><td>Installs a new queue in the load regulator on the current node.</td></tr><tr><td valign="top"><a href="#ask-1">ask/1</a></td><td>Asks permission to run a job of Type.</td></tr><tr><td valign="top"><a href="#ask_queue-2">ask_queue/2</a></td><td>Sends a synchronous request to a specific queue.</td></tr><tr><td valign="top"><a href="#delete_counter-1">delete_counter/1</a></td><td>Deletes a named counter from the load regulator on the current node.</td></tr><tr><td valign="top"><a href="#delete_group_rate-1">delete_group_rate/1</a></td><td></td></tr><tr><td valign="top"><a href="#delete_queue-1">delete_queue/1</a></td><td>Deletes the named queue from the load regulator on the current node.</td></tr><tr><td valign="top"><a href="#dequeue-2">dequeue/2</a></td><td></td></tr><tr><td valign="top"><a href="#done-1">done/1</a></td><td>Signals completion of an executed task.</td></tr><tr><td valign="top"><a href="#enqueue-2">enqueue/2</a></td><td></td></tr><tr><td valign="top"><a href="#info-1">info/1</a></td><td></td></tr><tr><td valign="top"><a href="#job_info-1">job_info/1</a></td><td>Retrieves job-specific information from the <code>Opaque</code> data object.</td></tr><tr><td valign="top"><a href="#modify_counter-2">modify_counter/2</a></td><td></td></tr><tr><td valign="top"><a href="#modify_group_rate-2">modify_group_rate/2</a></td><td></td></tr><tr><td valign="top"><a href="#modify_regulator-4">modify_regulator/4</a></td><td></td></tr><tr><td valign="top"><a href="#queue_info-1">queue_info/1</a></td><td></td></tr><tr><td valign="top"><a href="#queue_info-2">queue_info/2</a></td><td></td></tr><tr><td valign="top"><a href="#run-2">run/2</a></td><td>Executes Function() when permission has been granted by job regulator.</td></tr></table>
+<table width="100%" border="1" cellspacing="0" cellpadding="2" summary="function index"><tr><td valign="top"><a href="#add_counter-2">add_counter/2</a></td><td>Adds a named counter to the load regulator on the current node.</td></tr><tr><td valign="top"><a href="#add_group_rate-2">add_group_rate/2</a></td><td>Adds a group rate regulator to the load regulator on the current node.</td></tr><tr><td valign="top"><a href="#add_queue-2">add_queue/2</a></td><td>Installs a new queue in the load regulator on the current node.</td></tr><tr><td valign="top"><a href="#ask-1">ask/1</a></td><td>Asks permission to run a job of Type.</td></tr><tr><td valign="top"><a href="#ask_queue-2">ask_queue/2</a></td><td>Sends a synchronous request to a specific queue.</td></tr><tr><td valign="top"><a href="#delete_counter-1">delete_counter/1</a></td><td>Deletes a named counter from the load regulator on the current node.</td></tr><tr><td valign="top"><a href="#delete_group_rate-1">delete_group_rate/1</a></td><td></td></tr><tr><td valign="top"><a href="#delete_queue-1">delete_queue/1</a></td><td>Deletes the named queue from the load regulator on the current node.</td></tr><tr><td valign="top"><a href="#dequeue-2">dequeue/2</a></td><td></td></tr><tr><td valign="top"><a href="#done-1">done/1</a></td><td>Signals completion of an executed task.</td></tr><tr><td valign="top"><a href="#enqueue-2">enqueue/2</a></td><td></td></tr><tr><td valign="top"><a href="#info-1">info/1</a></td><td></td></tr><tr><td valign="top"><a href="#job_info-1">job_info/1</a></td><td>Retrieves job-specific information from the <code>Opaque</code> data object.</td></tr><tr><td valign="top"><a href="#modify_counter-2">modify_counter/2</a></td><td></td></tr><tr><td valign="top"><a href="#modify_group_rate-2">modify_group_rate/2</a></td><td></td></tr><tr><td valign="top"><a href="#modify_queue-2">modify_queue/2</a></td><td>Modifies queue parameters of existing queue.</td></tr><tr><td valign="top"><a href="#modify_regulator-4">modify_regulator/4</a></td><td></td></tr><tr><td valign="top"><a href="#queue_info-1">queue_info/1</a></td><td></td></tr><tr><td valign="top"><a href="#queue_info-2">queue_info/2</a></td><td></td></tr><tr><td valign="top"><a href="#run-2">run/2</a></td><td>Executes Function() when permission has been granted by job regulator.</td></tr></table>
 
 
 <a name="functions"></a>
@@ -32,9 +32,7 @@ __Authors:__ : Ulf Wiger ([`ulf@wiger.net`](mailto:ulf@wiger.net)).
 <pre><code>
 add_counter(Name, Options) -&gt; ok
 </code></pre>
-
-<br></br>
-
+<br />
 
 Adds a named counter to the load regulator on the current node.
 Fails if there already is a counter the name `Name`.
@@ -46,9 +44,7 @@ Fails if there already is a counter the name `Name`.
 <pre><code>
 add_group_rate(Name, Options) -&gt; ok
 </code></pre>
-
-<br></br>
-
+<br />
 
 Adds a group rate regulator to the load regulator on the current node.
 Fails if there is already a group rate regulator of the same name.
@@ -60,9 +56,7 @@ Fails if there is already a group rate regulator of the same name.
 <pre><code>
 add_queue(Name::any(), Options::[{Key, Value}]) -&gt; ok
 </code></pre>
-
-<br></br>
-
+<br />
 
 Installs a new queue in the load regulator on the current node.
 <a name="ask-1"></a>
@@ -73,9 +67,7 @@ Installs a new queue in the load regulator on the current node.
 <pre><code>
 ask(Type) -&gt; {ok, Opaque} | {error, Reason}
 </code></pre>
-
-<br></br>
-
+<br />
 
 
 Asks permission to run a job of Type. Returns when permission granted.
@@ -96,9 +88,7 @@ regulation strategy may change over time, it is the prudent thing to do.
 <pre><code>
 ask_queue(QueueName, Request) -&gt; Reply
 </code></pre>
-
-<br></br>
-
+<br />
 
 
 Sends a synchronous request to a specific queue.
@@ -117,9 +107,7 @@ inspection, or for influencing the queue state.
 <pre><code>
 delete_counter(Name) -&gt; boolean()
 </code></pre>
-
-<br></br>
-
+<br />
 
 Deletes a named counter from the load regulator on the current node.
 Returns `true` if there was in fact such a counter; `false` otherwise.
@@ -138,9 +126,7 @@ Returns `true` if there was in fact such a counter; `false` otherwise.
 <pre><code>
 delete_queue(Name) -&gt; boolean()
 </code></pre>
-
-<br></br>
-
+<br />
 
 Deletes the named queue from the load regulator on the current node.
 Returns `true` if there was in fact such a queue; `false` otherwise.
@@ -159,9 +145,7 @@ Returns `true` if there was in fact such a queue; `false` otherwise.
 <pre><code>
 done(Opaque) -&gt; ok
 </code></pre>
-
-<br></br>
-
+<br />
 
 
 Signals completion of an executed task.
@@ -193,9 +177,7 @@ effect if the job type is purely rate-regulated.
 <pre><code>
 job_info(X1::Opaque) -&gt; undefined | Info
 </code></pre>
-
-<br></br>
-
+<br />
 
 
 Retrieves job-specific information from the `Opaque` data object.
@@ -217,6 +199,21 @@ granted job request. This could be used e.g. for load-balancing strategies.
 `modify_group_rate(GRName, Opts) -> any()`
 
 
+<a name="modify_queue-2"></a>
+
+### modify_queue/2 ###
+
+
+<pre><code>
+modify_queue(Name::any(), Options::[{Key, Value}]) -&gt; ok | {error, Reason}
+</code></pre>
+<br />
+
+
+Modifies queue parameters of existing queue.
+
+
+The queue parameters that can be modified are `max_size` and `max_time`.
 <a name="modify_regulator-4"></a>
 
 ### modify_regulator/4 ###
@@ -246,9 +243,7 @@ granted job request. This could be used e.g. for load-balancing strategies.
 <pre><code>
 run(Queue::Type, Function::function()) -&gt; Result
 </code></pre>
-
-<br></br>
-
+<br />
 
 
 Executes Function() when permission has been granted by job regulator.
