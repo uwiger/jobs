@@ -237,17 +237,17 @@ For issues, comments or feedback please [create an issue!] [1]
 
 
 <table width="100%" border="0" summary="list of modules">
-<tr><td><a href="http://github.com/uwiger/jobs/blob/master/doc/jobs.md" class="module">jobs</a></td></tr>
-<tr><td><a href="http://github.com/uwiger/jobs/blob/master/doc/jobs_app.md" class="module">jobs_app</a></td></tr>
-<tr><td><a href="http://github.com/uwiger/jobs/blob/master/doc/jobs_info.md" class="module">jobs_info</a></td></tr>
-<tr><td><a href="http://github.com/uwiger/jobs/blob/master/doc/jobs_lib.md" class="module">jobs_lib</a></td></tr>
-<tr><td><a href="http://github.com/uwiger/jobs/blob/master/doc/jobs_prod_simple.md" class="module">jobs_prod_simple</a></td></tr>
-<tr><td><a href="http://github.com/uwiger/jobs/blob/master/doc/jobs_queue.md" class="module">jobs_queue</a></td></tr>
-<tr><td><a href="http://github.com/uwiger/jobs/blob/master/doc/jobs_queue_list.md" class="module">jobs_queue_list</a></td></tr>
-<tr><td><a href="http://github.com/uwiger/jobs/blob/master/doc/jobs_sampler.md" class="module">jobs_sampler</a></td></tr>
-<tr><td><a href="http://github.com/uwiger/jobs/blob/master/doc/jobs_sampler_cpu.md" class="module">jobs_sampler_cpu</a></td></tr>
-<tr><td><a href="http://github.com/uwiger/jobs/blob/master/doc/jobs_sampler_history.md" class="module">jobs_sampler_history</a></td></tr>
-<tr><td><a href="http://github.com/uwiger/jobs/blob/master/doc/jobs_sampler_mnesia.md" class="module">jobs_sampler_mnesia</a></td></tr>
-<tr><td><a href="http://github.com/uwiger/jobs/blob/master/doc/jobs_server.md" class="module">jobs_server</a></td></tr>
-<tr><td><a href="http://github.com/uwiger/jobs/blob/master/doc/jobs_stateful_simple.md" class="module">jobs_stateful_simple</a></td></tr></table>
+<tr><td><a href="jobs.md" class="module">jobs</a></td></tr>
+<tr><td><a href="jobs_app.md" class="module">jobs_app</a></td></tr>
+<tr><td><a href="jobs_info.md" class="module">jobs_info</a></td></tr>
+<tr><td><a href="jobs_lib.md" class="module">jobs_lib</a></td></tr>
+<tr><td><a href="jobs_prod_simple.md" class="module">jobs_prod_simple</a></td></tr>
+<tr><td><a href="jobs_queue.md" class="module">jobs_queue</a></td></tr>
+<tr><td><a href="jobs_queue_list.md" class="module">jobs_queue_list</a></td></tr>
+<tr><td><a href="jobs_sampler.md" class="module">jobs_sampler</a></td></tr>
+<tr><td><a href="jobs_sampler_cpu.md" class="module">jobs_sampler_cpu</a></td></tr>
+<tr><td><a href="jobs_sampler_history.md" class="module">jobs_sampler_history</a></td></tr>
+<tr><td><a href="jobs_sampler_mnesia.md" class="module">jobs_sampler_mnesia</a></td></tr>
+<tr><td><a href="jobs_server.md" class="module">jobs_server</a></td></tr>
+<tr><td><a href="jobs_stateful_simple.md" class="module">jobs_stateful_simple</a></td></tr></table>
 

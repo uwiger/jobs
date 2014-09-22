@@ -52,7 +52,168 @@ Specifically, jobs provides three features:
 Examples
 --------
 
-To be done
+The following examples are fetched from the EUC 2013 presentation on Jobs.
+
+<h4>Regulate incoming HTTP requests (e.g. JSON-RPC)</h4>
+
+<pre lang="erlang">
+%% @doc Handle a JSON-RPC request.
+handler_session(Arg) -&gt;
+    jobs:run(
+        rpc_from_web,
+        fun() -&gt;
+               try
+                  yaws_rpc:handler_session(
+                    maybe_multipart(Arg),{?MODULE, web_rpc})
+               catch
+                   error:E -&gt;
+                       ...
+               end
+    end).
+</pre>
+
+<h4>From Riak prototype, using explicit ask/done</h4>
+
+<pre lang="erlang">
+case jobs:ask(riak_kv_fsm) of
+  {ok, JobId} -&gt;
+    try
+      {ok, Pid} = riak_kv_get_fsm_sup:start_get_fsm(...),
+      Timeout = recv_timeout(Options),
+      wait_for_reqid(ReqId, Timeout)
+    after
+      jobs:done(JobId)  %% Only needed if process stays alive
+    end;
+  {error, rejected} -&gt;  %% Overload!
+    {error, timeout}
+end
+</pre>
+
+<h4>Shell demo - simple rate-limited queue</h4>
+
+<pre lang="erlang">
+2&gt; jobs:add_queue(q, [{standard_rate,1}]).
+ok
+3&gt; jobs:run(q, fun() -&gt; io:fwrite("job: ~p~n", [time()]) end).
+job: {14,37,7}
+ok
+4&gt; jobs:run(q, fun() -&gt; io:fwrite("job: ~p~n", [time()]) end).
+job: {14,37,8}
+ok
+...
+5&gt; jobs:run(q, fun() -&gt; io:fwrite("job: ~p~n", [time()]) end).
+job: {14,37,10}
+ok
+6&gt; jobs:run(q, fun() -&gt; io:fwrite("job: ~p~n", [time()]) end).
+job: {14,37,11}
+ok
+</pre>
+
+<h4>Shell demo - "stateful" queues</h4>
+
+<pre lang="erlang">
+Eshell V5.9.2 (abort with ^G)
+1&gt; application:start(jobs).
+ok
+2&gt; jobs:add_queue(q,
+     [{standard_rate,1},
+      {stateful,fun(init,_) -&gt; {0,5};
+                   ({call,{size,Sz},_,_},_) -&gt; {reply,ok,{0,Sz}};
+                   ({N,Sz},_) -&gt; {N, {(N+1) rem Sz,Sz}}
+                end}]).
+ok
+3&gt; jobs:run(q,fun(Opaque) -&gt; jobs:job_info(Opaque) end).
+0
+4&gt; jobs:run(q,fun(Opaque) -&gt; jobs:job_info(Opaque) end).
+1
+5&gt; jobs:run(q,fun(Opaque) -&gt; jobs:job_info(Opaque) end).
+2
+6&gt; jobs:run(q,fun(Opaque) -&gt; jobs:job_info(Opaque) end).
+3
+7&gt; jobs:run(q,fun(Opaque) -&gt; jobs:job_info(Opaque) end).
+4
+8&gt; jobs:run(q,fun(Opaque) -&gt; jobs:job_info(Opaque) end).
+0
+9&gt; jobs:run(q,fun(Opaque) -&gt; jobs:job_info(Opaque) end).
+1
+%% Resize the 'pool'
+10&gt; jobs:ask_queue(q, {size,3}).
+ok
+11&gt; jobs:run(q,fun(Opaque) -&gt; jobs:job_info(Opaque) end).
+0
+12&gt; jobs:run(q,fun(Opaque) -&gt; jobs:job_info(Opaque) end).
+1
+13&gt; jobs:run(q,fun(Opaque) -&gt; jobs:job_info(Opaque) end).
+2
+14&gt; jobs:run(q,fun(Opaque) -&gt; jobs:job_info(Opaque) end).
+0
+...
+</pre>
+
+<h4>Demo - producers</h4>
+
+<pre lang="erlang">
+Eshell V5.9.2 (abort with ^G)
+1&gt; application:start(jobs).
+ok
+2&gt; jobs:add_queue(p,
+  [{producer, fun() -&gt; io:fwrite("job: ~p~n",[time()]) end},
+   {standard_rate,1}]).
+job: {14,33,51}
+ok
+3&gt; job: {14,33,52}
+job: {14,33,53}
+job: {14,33,54}
+job: {14,33,55}
+...
+</pre>
+
+<h4>Demo - passive queues</h4>
+
+<pre lang="erlang">
+2&gt; jobs:add_queue(q,[passive]).
+ok
+3&gt; Fun = fun() -&gt; io:fwrite("~p starting...~n",[self()]),
+3&gt;                Res = jobs:dequeue(q, 3),
+3&gt;                io:fwrite("Res = ~p~n", [Res])
+3&gt;       end.
+#Fun&lt;erl_eval.20.82930912&gt;
+4&gt; jobs:add_queue(p, [{standard_counter,3},{producer,Fun}]).
+&lt;0.47.0&gt; starting...
+&lt;0.48.0&gt; starting...
+&lt;0.49.0&gt; starting...
+ok
+5&gt; jobs:enqueue(q, job1).
+Res = [{113214444910647,job1}]
+ok
+&lt;0.54.0&gt; starting...
+</pre>
+
+<h4>Demo - queue status</h4>
+
+<pre lang="erlang">
+(a@uwair)1&gt; jobs:queue_info(q).
+{queue,[{name,q},
+        {mod,jobs_queue},
+        {type,fifo},
+        {group,undefined},
+        {regulators,[{rr,[{name,{rate,q,1}},
+                          {rate,{rate,[{limit,1},
+                          {preset_limit,1},
+                          {interval,1.0e3},
+                          {modifiers,
+                           [{cpu,10},{memory,10}]},
+                          {active_modifiers,[]}
+                         ]}}]}]},
+        {max_time,undefined},
+        {max_size,undefined},
+        {latest_dispatch,113216378663298},
+        {approved,4},
+        {queued,0},
+        ...,
+        {stateful,undefined},
+        {st,{st,45079}}]}
+</pre>
 
 Prerequisites
 -------------

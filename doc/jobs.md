@@ -17,7 +17,10 @@ __Authors:__ : Ulf Wiger ([`ulf@wiger.net`](mailto:ulf@wiger.net)).
 ## Function Index ##
 
 
-<table width="100%" border="1" cellspacing="0" cellpadding="2" summary="function index"><tr><td valign="top"><a href="#add_counter-2">add_counter/2</a></td><td>Adds a named counter to the load regulator on the current node.</td></tr><tr><td valign="top"><a href="#add_group_rate-2">add_group_rate/2</a></td><td>Adds a group rate regulator to the load regulator on the current node.</td></tr><tr><td valign="top"><a href="#add_queue-2">add_queue/2</a></td><td>Installs a new queue in the load regulator on the current node.</td></tr><tr><td valign="top"><a href="#ask-1">ask/1</a></td><td>Asks permission to run a job of Type.</td></tr><tr><td valign="top"><a href="#ask_queue-2">ask_queue/2</a></td><td>Sends a synchronous request to a specific queue.</td></tr><tr><td valign="top"><a href="#delete_counter-1">delete_counter/1</a></td><td>Deletes a named counter from the load regulator on the current node.</td></tr><tr><td valign="top"><a href="#delete_group_rate-1">delete_group_rate/1</a></td><td></td></tr><tr><td valign="top"><a href="#delete_queue-1">delete_queue/1</a></td><td>Deletes the named queue from the load regulator on the current node.</td></tr><tr><td valign="top"><a href="#dequeue-2">dequeue/2</a></td><td></td></tr><tr><td valign="top"><a href="#done-1">done/1</a></td><td>Signals completion of an executed task.</td></tr><tr><td valign="top"><a href="#enqueue-2">enqueue/2</a></td><td></td></tr><tr><td valign="top"><a href="#info-1">info/1</a></td><td></td></tr><tr><td valign="top"><a href="#job_info-1">job_info/1</a></td><td>Retrieves job-specific information from the <code>Opaque</code> data object.</td></tr><tr><td valign="top"><a href="#modify_counter-2">modify_counter/2</a></td><td></td></tr><tr><td valign="top"><a href="#modify_group_rate-2">modify_group_rate/2</a></td><td></td></tr><tr><td valign="top"><a href="#modify_queue-2">modify_queue/2</a></td><td>Modifies queue parameters of existing queue.</td></tr><tr><td valign="top"><a href="#modify_regulator-4">modify_regulator/4</a></td><td></td></tr><tr><td valign="top"><a href="#queue_info-1">queue_info/1</a></td><td></td></tr><tr><td valign="top"><a href="#queue_info-2">queue_info/2</a></td><td></td></tr><tr><td valign="top"><a href="#run-2">run/2</a></td><td>Executes Function() when permission has been granted by job regulator.</td></tr></table>
+<table width="100%" border="1" cellspacing="0" cellpadding="2" summary="function index"><tr><td valign="top"><a href="#add_counter-2">add_counter/2</a></td><td>Adds a named counter to the load regulator on the current node.</td></tr><tr><td valign="top"><a href="#add_group_rate-2">add_group_rate/2</a></td><td>Adds a group rate regulator to the load regulator on the current node.</td></tr><tr><td valign="top"><a href="#add_queue-2">add_queue/2</a></td><td>Installs a new queue in the load regulator on the current node.</td></tr><tr><td valign="top"><a href="#ask-1">ask/1</a></td><td>Asks permission to run a job of Type.</td></tr><tr><td valign="top"><a href="#ask_queue-2">ask_queue/2</a></td><td>Sends a synchronous request to a specific queue.</td></tr><tr><td valign="top"><a href="#delete_counter-1">delete_counter/1</a></td><td>Deletes a named counter from the load regulator on the current node.</td></tr><tr><td valign="top"><a href="#delete_group_rate-1">delete_group_rate/1</a></td><td></td></tr><tr><td valign="top"><a href="#delete_queue-1">delete_queue/1</a></td><td>Deletes the named queue from the load regulator on the current node.</td></tr><tr><td valign="top"><a href="#dequeue-2">dequeue/2</a></td><td>Extracts up to <code>N</code> items from a passive queue.</td></tr><tr><td valign="top"><a href="#done-1">done/1</a></td><td>Signals completion of an executed task.</td></tr><tr><td valign="top"><a href="#enqueue-2">enqueue/2</a></td><td>Inserts <code>Item` into a passive queue.
+
+Note that this function only works on passive queues. An exception will be
+raised if the queue doesn</code>t exist, or isn't passive.</td></tr><tr><td valign="top"><a href="#info-1">info/1</a></td><td></td></tr><tr><td valign="top"><a href="#job_info-1">job_info/1</a></td><td>Retrieves job-specific information from the <code>Opaque</code> data object.</td></tr><tr><td valign="top"><a href="#modify_counter-2">modify_counter/2</a></td><td></td></tr><tr><td valign="top"><a href="#modify_group_rate-2">modify_group_rate/2</a></td><td></td></tr><tr><td valign="top"><a href="#modify_queue-2">modify_queue/2</a></td><td>Modifies queue parameters of existing queue.</td></tr><tr><td valign="top"><a href="#modify_regulator-4">modify_regulator/4</a></td><td></td></tr><tr><td valign="top"><a href="#queue_info-1">queue_info/1</a></td><td></td></tr><tr><td valign="top"><a href="#queue_info-2">queue_info/2</a></td><td></td></tr><tr><td valign="top"><a href="#run-2">run/2</a></td><td>Executes Function() when permission has been granted by job regulator.</td></tr></table>
 
 
 <a name="functions"></a>
@@ -58,7 +61,216 @@ add_queue(Name::any(), Options::[{Key, Value}]) -&gt; ok
 </code></pre>
 <br />
 
+
 Installs a new queue in the load regulator on the current node.
+
+
+
+Valid options are:
+
+
+
+* `{regulators, Rs}`, where `Rs` is a list of rate- or counter-based
+regulators. Valid regulators listed below. Default: [].
+
+
+
+* `{type, Type}` - type of queue. Valid types listed below. Default: `fifo`.
+
+
+
+* `{action, Action}` - automatic action to perform for each request.
+Valid actions described below. Default: `undefined`.
+
+
+
+* `{check_interval, I}` - If specified (in ms), this overrides the interval
+derived from any existing rate regulator. Note that regardless of how often
+the queue is checked, enough jobs will be dispatched at each interval to
+maintain the highest allowed rate possible, but the check interval may
+thus affect how many jobs are dispatched at the same time. Normally, this
+should not have to be specified.
+
+
+
+* `{max_time, T}`, specifies how long (in ms) a job is allowed to wait
+in the queue before it is automatically rejected.
+
+
+
+* `{max_size, S}`, indicates how many items can be queued before requests
+are automatically rejected. Strictly speaking, size is whatever the queue
+behavior reports as the size; in the default queue behavior, it is the
+number of elements in the queue.
+
+
+
+* `{mod, M}`, indicates which queue behavior to use. Default is `jobs_queue`.
+
+
+
+In addition, some 'abbreviated' options are supported:
+
+
+
+* `{standard_rate, R}` - equivalent to
+`[{regulators,[{rate,[{limit,R}, {modifiers,[{cpu,10},{memory,10}]}]}]}]`
+
+
+
+* `{standard_counter, C}` - equivalent to
+`[{regulators,[{counter,[{limit,C}, {modifiers,[{cpu,10},{memory,10}]}]}]}]`
+
+
+
+* `{producer, F}` - equivalent to `{type, {producer, F}}`
+
+
+
+* `passive` - equivalent to `{type, {passive, fifo}}`
+
+
+
+* `approve | reject` - equivalent to `{action, approve | reject}`
+
+
+
+__Regulators__
+
+
+* `{rate, Opts}` - rate regulator. Valid options are
+
+1. `{limit, Limit}` where `Limit` is the maximum rate (requests/sec)
+
+1. `{modifiers, Mods}`, control feedback-based regulation. See below.
+
+1. `{name, Name}`, optional. The default name for the regulator is
+`{rate, QueueName, N}`, where `N` is an index indicating which rate regulator
+in the list is referred. Currently, at most one rate regulator is allowed,
+so `N` will always be `1`.
+
+
+
+* `{counter, Opts}` - counter regulator. Valid options are
+
+1. `{limit, Limit}`, where `Limit` is the number of concurrent jobs
+allowed.
+
+1. `{increment, Incr}`, increment per job. Default is `1`.
+
+1. `{modifiers, Mods}`, control feedback-based regulation. See below.
+
+
+
+
+* `{named_counter, Name, Incr}`, use an existing counter, incrementing it
+with `Incr` for each job. `Name` can either refer to a named top-level
+counter (see [`add_counter/2`](#add_counter-2)), or a queue-specific counter
+(these are named `{counter,Qname,N}`, where `N` is an index specifying
+their relative position in the regulators list - e.g. first or second
+counter).
+
+
+
+* `{group_rate, R}`, refers to a top-level group rate `R`.
+See [`add_group_rate/2`](#add_group_rate-2).
+
+
+
+__Types__
+
+
+
+* `fifo | lifo` - these are the types supported by the default queue
+behavior. While lifo may sound like an odd choice, it may have benefits
+for stochastic traffic with time constraints: there is no point to
+'fairness', since requests cannot control their place in the queue, and
+choosing the 'freshest' job may increase overall goodness critera.
+
+
+* `{producer, F}`, the queue is not for incoming requests, but rather
+generates jobs. Valid options for `F` are
+(for details, see [`jobs_prod_simpe`](jobs_prod_simpe.md)):
+
+1. A fun of arity 0, indicating a stateless producer
+
+1. A fun of arity 2, indicating a stateful producer
+
+1. `{M, F, A}`, indicating a stateless producer
+
+1. `{Mod, Args}` indicating a stateful producer
+
+
+
+
+* `{action, approve | reject}`, specifies an automatic response to every
+request. This can be used to either block a queue (`reject`) or set it as
+a pass-through ('approve').
+
+
+
+__Modifiers__
+
+
+
+Jobs supports feedback-based modification of regulators.
+
+
+
+The sampler framework sends feedback messages of type
+`[{Modifier, Local, Remote::[{node(), Level}]}]`.
+
+
+
+Each regulator can specify a list of modifier instructions:
+
+
+
+* `{Modifier, Local, Remote}` - `Modifier` can be any label used by the
+samplers (see [`jobs_sampler`](jobs_sampler.md)). `Local` and `Remote` indicate
+increments in percent by which to reduce the limit of the given regulator.
+The `Local` increment is used for feedback info pertaining to the local
+node, and the `Remote` increment is used for remote indicators. `Local`
+is given as a percentage value (e.g. `10` for `10 %`). The `Remote`
+increment is either `{avg, Percent}` or `{max, Percent}`, indicating whether
+to respond to the average load of other nodes or to the most loaded node.
+The correction from `Local` and the correction from `Remote` are summed
+before applying to the regulator limit.
+
+
+
+* `{Modifier, Local}` - same as above, but responding only to local
+indications, ignoring the load on remote nodes.
+
+
+
+* `{Modifier, F::function((Local, Remote) -> integer())}` - the function
+`F(Local, Remote)` is applied and expected to return a correction value,
+in percentage units.
+
+
+
+* `{Modifier, {Module, Function}}` - `Module:Function(Local Remote)`
+is applied an expected to return a correction value in percentage units.
+
+
+
+For example, if a rate regulator has a limit of `100` and has a modifier,
+`{cpu, 10}`, then a feedback message of `{cpu, 2, _Remote}` will reduce
+the rate limit by `2*10` percent, i.e. down to `80`.
+
+
+
+Note that modifiers are always applied to the _preset_ limit,
+not the current limit. Thus, the next round of feedback messages in our
+example will be applied to the preset limit of `100`, not the `80` that
+resulted from the previous feedback messages. A correction value of `0`
+will reset the limit to the preset value.
+
+
+If there are more than one modifier with the same name, the last one in the
+list will be the one used.
+
 <a name="ask-1"></a>
 
 ### ask/1 ###
@@ -134,9 +346,30 @@ Returns `true` if there was in fact such a queue; `false` otherwise.
 
 ### dequeue/2 ###
 
-`dequeue(Queue, N) -> any()`
+
+<pre><code>
+dequeue(Queue, N) -&gt; [{JobID, Item}]
+</code></pre>
+<br />
 
 
+Extracts up to `N` items from a passive queue
+
+
+
+Note that this function only works on passive queues. An exception will be
+raised if the queue doesn't exist, or if it isn't passive.
+
+
+
+This function will block until at least one item can be extracted from the
+queue (see [`enqueue/2`](#enqueue-2)). No more than `N` items will be extracted.
+
+
+The items returned are on the form `{JobID, Item}`, where `JobID` is in
+the form of a microsecond timestamp
+(see [`jobs_lib:timestamp_to_datetime/1`](jobs_lib.md#timestamp_to_datetime-1)), and `Item` is whatever was
+provided in [`enqueue/2`](#enqueue-2).
 <a name="done-1"></a>
 
 ### done/1 ###
@@ -159,9 +392,21 @@ effect if the job type is purely rate-regulated.
 
 ### enqueue/2 ###
 
-`enqueue(Queue, Item) -> any()`
+
+<pre><code>
+enqueue(Queue, Item) -&gt; ok | {error, Reason}
+</code></pre>
+<br />
 
 
+Inserts `Item` into a passive queue.
+
+Note that this function only works on passive queues. An exception will be
+raised if the queue doesn`t exist, or isn't passive.
+
+
+Returns `ok` if `Item` was successfully entered into the queue,
+`{error, Reason}` otherwise (e.g. if the queue is full).
 <a name="info-1"></a>
 
 ### info/1 ###

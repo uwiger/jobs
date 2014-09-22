@@ -1424,7 +1424,12 @@ apply_damper(Type, Found, Local, Remote, R) ->
 				 RU * max_remotes(Remote)
 			 end,
 	    apply_corr(Type, LocalCorr + RemoteCorr, R);
-	{_, F} when tuple_size(F) == 2; is_function(F,2) ->
+	{_, {M,F}} ->
+	    case M:F(Local, Remote) of
+		Corr when is_integer(Corr) ->
+		    apply_corr(Type, Corr, R)
+	    end;
+	{_, F} when is_function(F,2) ->
 	    case F(Local, Remote) of
 		Corr when is_integer(Corr) ->
 		    apply_corr(Type, Corr, R)
