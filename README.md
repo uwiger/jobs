@@ -222,6 +222,110 @@ ok
 
 ```
 
+##Scenarios and Corresponding Configuration Examples
+
+###EXAMPLE 1: Add counter regulated queue called **_heavy_crunches_** and limit your cpu intensive code executions to no more than 7 at a time
+
+**Configuration:**
+
+>{jobs,  [ {queues, [ { **_heavy_crunches_**, [ {regulators, [{ **counter**, [{limit,7}]}]}]}    ]}    ] }
+
+**Code:**  
+Anywhere in your code you call heavy-crunch type of work, wrap it in a call to jobs server and it will end up being counter-regulated.
+
+>jobs:run( **heavy_crunches**,fun()->my_cpu_intensive_calculation() end)
+
+
+###EXAMPLE 2:  Add rate regulated queue called **_http_requests_** to ensure that your http server gets no more than 1000 requests per second, additionally, set the queue size to, 10000 to make sure the queue doesn't take up too much memory
+
+>{jobs, [ {queues, [ { **_http_requests_**,[ { **max_size**, 10000},  {regulators, [{ **rate**, [{limit,1000}]}]}]}]}]}
+
+
+**Code:**
+Wrap your request entry point in a call to jobs server and it will end up being rate-regulated.  
+NOTE: with the config above once 10,000 requests accumulates in the queue any incoming requests are ignored.  
+
+```jobs:run(http_requests,fun()->handle_http_request() end)```
+
+
+
+###EXAMPLE 3:  HTTP requests will always have a reasonable execution time.  No point in keeping them in the queue past the timeout. 
+ 
+Let's create **_patient_user_requests_** queue that will keep requests in the queue for up to 10 seconds
+     
+>{patient_user_requests, [{ **max_time**, _10000_}, {regulators, [{rate, [{limit,1000}]}]}
+     
+Let's create **_impatient_user_requests_** queue that will keep requests in the queue for up to 200 milliseconds.  
+Additionally, we'll make it a LIFO queue. Unfair, but if we assume that happy/unhappy is a boolean  
+we're likely to maximize the happy users!
+ 
+>{impatient_user_requests,[{ **max_time**, _200_}, { **type**, **lifo**}, {regulators, [{rate, [{limit,1000}]}]}
+ 
+   
+NOTE: In order to pace requests from **both** queues at 1000 per second, use **group_rate** regulation (EXAMPLE 4)
+  
+  
+###EXAMPLE 4: Rate regulate http requests from multiple queues
+
+Create **group_rates** regulator called **_http_request_rate_**  and assign it to both _impatient_user_requests_ and _patient_user_requests_ 
+                                                                           
+>{jobs,  
+  [{ **group_rates**,[{ **_http_request_rate_**, [{limit,1000}]}]},     
+  &nbsp;&nbsp;&nbsp;&nbsp;{queues,   
+    &nbsp;&nbsp;&nbsp;&nbsp;[    
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{impatient_user_requests,  [{max_time, 200}, {type, lifo}, {regulators,[{ **group_rate**, **_http_request_rate_**}]} ] },    
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{patient_user_requests, [{max_time, 10000}, {regulators,[{ **group_rate**, **_http_request_rate_**}]} ] }    
+    &nbsp;&nbsp;&nbsp;&nbsp;]  
+ }
+       
+       
+
+###EXAMPLE 5: Implement and use your own queue 
+ 
+ **Code:**
+  
+>-module(my_own_queue).  
+ -behaviour(jobs_queue).  
+ -export([new/2,  
+ delete/1,          
+ in/3,  
+ out/2,  
+ peek/1,  
+ info/2,  
+ all/1]).  
+ ## implementation  
+ ...
+ 
+ **Configuration:**
+ 
+>{jobs,[  
+ &nbsp;&nbsp;&nbsp;&nbsp;{queues, [  {http_requests,[  
+ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{ **mod** , **_my_own_queue_**},  
+ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{max_size, 10000 },  
+ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{regulators, [{rate, [{limit,1000}]}]}  ]}  ]}     
+ ] } 
+ 
+ 
+ 
+##The use of sampler framework
+**Get a sampler running and sending feedback to the jobs server:**
+>{samplers, [{ **_sampler_name_**, **_sampler_module_**, []} ]}
+
+**Apply its feedback to a regulator limit:**
+>{regulators,   [{ _regulator_type_,[  {limit, _regulator_limit_}, {modifiers,[{ **_sampler_name_**, 10}]
+
+###EXAMPLE 6: Adjust rate regulator limit on the fly based on the feedback from jobs_sampler_cpu named _cpu_feedback_
+
+>{jobs, [  
+ &nbsp;&nbsp;&nbsp;&nbsp;{samplers,[  { **cpu_feedback**, jobs_sampler_cpu,[]}  ]},  
+ &nbsp;&nbsp;&nbsp;&nbsp;{queues, [{http_requests,[ {regulators,   [{rate,[  {limit,1000}, {modifiers,[{ **cpu_feedback**, 10}]}  ]}  ] ]}  ]}    
+ ]}
+ 
+ NOTE: In this example, when CPU usage increases by %30, the sampler will calculate %70 to be applied to the limit.  
+ The limit temporarily becomes 700/second.  
+ Once the CPU usage drops to normal, the sampler sends 100%, the limit will go back to original 1000/second
+
+
 Prerequisites
 -------------
 This application requires 'exprecs'.
