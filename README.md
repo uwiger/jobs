@@ -221,27 +221,27 @@ ok
         {st,{st,45079}}]}
 
 ```
+---------
 
 ##Scenarios and Corresponding Configuration Examples
 
-####EXAMPLE 1:   
-* Add counter regulated queue called **_heavy_crunches_** to limit your cpu intensive code executions to no more than 7 at a time
-
+####EXAMPLE 1:
+* Add counter regulated queue called ___heavy_crunches___ to limit your cpu intensive code executions to no more than 7 at a time
 Configuration:
 
 ```erlang
 
-{ jobs, [ 
-    { queues, [ 
-        { heavy_crunches, [ { regulators, [{ counter, [{ limit, 7 }] } ] }] }    
+{ jobs, [
+    { queues, [
+        { heavy_crunches, [ { regulators, [{ counter, [{ limit, 7 }] } ] }] }
       ]
-    }    
-  ] 
+    }
+  ]
 }
 
 ```
 
-Anywhere in your code wrap cpu-intensive work in a call to jobs server and-- **voilà!** --it is counter-regulated: 
+Anywhere in your code wrap cpu-intensive work in a call to jobs server and-- __voilà!__ --it is counter-regulated:
 
 ```erlang
 
@@ -249,8 +249,8 @@ jobs:run( heavy_crunches,fun()->my_cpu_intensive_calculation() end)
 
 ```
 
-####EXAMPLE 2:  
-* Add rate regulated queue called **_http_requests_** to ensure that your http server gets no more than 1000 requests per second.  
+####EXAMPLE 2:
+* Add rate regulated queue called ___http_requests___ to ensure that your http server gets no more than 1000 requests per second.
 * Additionally, set the queue size to 10,000 (i.e. to control queue memory consumption)
 
 Configuration:
@@ -258,16 +258,16 @@ Configuration:
 ```erlang
 
 { jobs, [
-      { queues, [ 
-            { http_requests, [ { max_size, 10000},  {regulators, [{ rate, [{limit, 1000}]}]}]} 
+      { queues, [
+            { http_requests, [ { max_size, 10000},  {regulators, [{ rate, [{limit, 1000}]}]}]}
         ]
-      } 
+      }
   ]
 }
 
 ```
 
-Wrap your request entry point in a call to jobs server and it will end up being rate-regulated. 
+Wrap your request entry point in a call to jobs server and it will end up being rate-regulated.
 
 ```erlang
 
@@ -275,133 +275,132 @@ jobs:run(http_requests,fun()->handle_http_request() end)
 
 ```
 
-NOTE: with the config above, once 10,000 requests accumulates in the queue any incoming requests are dropped on the floor.  
+NOTE: with the config above, once 10,000 requests accumulates in the queue any incoming requests are dropped on the floor.
 
+####EXAMPLE 3:
+* HTTP requests will always have a reasonable execution time.  No point in keeping them in the queue past the timeout.
 
-####EXAMPLE 3:  
-* HTTP requests will always have a reasonable execution time.  No point in keeping them in the queue past the timeout.  
- 
- 
-* Let's create **_patient_user_requests_** queue that will keep requests in the queue for up to 10 seconds
-     
+* Let's create ___patient_user_requests___ queue that will keep requests in the queue for up to 10 seconds
+
 ```erlang
 
 { patient_user_requests, [
-    { max_time, 10000}, 
-    { regulators, [{rate, [ { limit, 1000 } ] } 
-  ] 
-}
-
-```
-* Let's create **_impatient_user_requests_** queue that will keep requests in the queue for up to 200 milliseconds.  
-Additionally, we'll make it a LIFO queue. Unfair, but if we assume that happy/unhappy is a boolean  
-we're likely to maximize the happy users!
- 
-     
-```erlang
- 
-{ impatient_user_requests, [
-    { max_time, 200}, 
-    { type, lifo},
-    { regulators, [{rate, [ { limit, 1000 } ] } 
+    { max_time, 10000},
+    { regulators, [{rate, [ { limit, 1000 } ] }
   ]
 }
 
 ```
-   
-NOTE: In order to pace requests from both queues at 1000 per second, use **group_rate** regulation (EXAMPLE 4)
-  
-  
-####EXAMPLE 4: 
+
+
+* Let's create ___impatient_user_requests___ queue that will keep requests in the queue for up to 200 milliseconds.
+Additionally, we'll make it a LIFO queue. Unfair, but if we assume that happy/unhappy is a boolean
+we're likely to maximize the happy users!
+
+```erlang
+
+{ impatient_user_requests, [
+    { max_time, 200},
+    { type, lifo},
+    { regulators, [{rate, [ { limit, 1000 } ] }
+  ]
+}
+
+```
+
+NOTE: In order to pace requests from both queues at 1000 per second, use __group_rate__ regulation (EXAMPLE 4)
+
+####EXAMPLE 4:
 * Rate regulate http requests from multiple queues
 
-Create **group_rates** regulator called **_http_request_rate_**  and assign it to both _impatient_user_requests_ and _patient_user_requests_ 
-                                                                           
+Create __group_rates__ regulator called ___http_request_rate___  and assign it to both _impatient_user_requests_ and _patient_user_requests_
+
 ```erlang
 
-{ jobs, [ 
-    { group_rates,[{ http_request_rate, [{limit,1000}] }] },     
-    { queues, [    
-        { impatient_user_requests,  
-            [ {max_time, 200}, {type, lifo}, {regulators,[{ group_rate, http_request_rate}]} ] },    
-        { patient_user_requests, 
-            [ {max_time, 10000}, {regulators,[{ group_rate, http_request_rate} ]} 
+{ jobs, [
+    { group_rates,[{ http_request_rate, [{limit,1000}] }] },
+    { queues, [
+        { impatient_user_requests,
+            [ {max_time, 200},
+              {type, lifo},
+              {regulators,[{ group_rate, http_request_rate}]}
+            ]
+        },
+        { patient_user_requests,
+            [ {max_time, 10000},
+              {regulators,[{ group_rate, http_request_rate}
+            ]
+        }
       ]
-    } 
-  ]  
+    }
+  ]
 }
 
-```      
+```
 
-####EXAMPLE 5: 
+####EXAMPLE 5:
 * Can't afford to drop http requests on the floor once max_size is reached?
 * Implement and use your own queue to persist those unfortunate http requests and serve them eventually
-  
+
 ```erlang
 
- -module(my_persistent_queue).  
- -behaviour(jobs_queue).  
- -export([  new/2,  
-            delete/1,          
-            in/3,  
-            out/2,  
-            peek/1,  
-            info/2,  
-            all/1]). 
-             
- ## implementation  
+ -module(my_persistent_queue).
+ -behaviour(jobs_queue).
+ -export([  new/2,
+            delete/1,
+            in/3,
+            out/2,
+            peek/1,
+            info/2,
+            all/1]).
+
+ ## implementation
  ...
- 
+
 ```
- 
+
 Configuration:
- 
+
 ```erlang
 
-{ jobs, [  
-    { queues, [  
+{ jobs, [
+    { queues, [
         { http_requests, [
-            { mod, my_persistent_queue},  
-            { max_size, 10000 },  
-            { regulators, [ { rate, [ { limit, 1000 } ] } ] } 
+            { mod, my_persistent_queue},
+            { max_size, 10000 },
+            { regulators, [ { rate, [ { limit, 1000 } ] } ] }
           ]
-        }  
+        }
       ]
-    }  
-  ] 
-} 
+    }
+  ]
+}
 
 ```
- 
- 
+
 ###The use of sampler framework
 1. Get a sampler running and sending feedback to the jobs server.
-2. Apply its feedback to a regulator limit. 
+2. Apply its feedback to a regulator limit.
 
-####EXAMPLE 6: 
-* Adjust rate regulator limit on the fly based on the feedback from **jobs_sampler_cpu** named **_cpu_feedback_**
+####EXAMPLE 6:
+* Adjust rate regulator limit on the fly based on the feedback from __jobs_sampler_cpu__ named ___cpu_feedback___
 
 ```erlang
 
-{ jobs, [  
-    { samplers, [{ cpu_feedback, jobs_sampler_cpu, [] } ] },  
-    { queues, [ 
-        { http_requests, [ 
-            { regulators,   [ { rate, [ { limit,1000 } ] }, 
-            { modifiers,    [ { cpu_feedback,  10} ] }  
+{ jobs, [
+    { samplers, [{ cpu_feedback, jobs_sampler_cpu, [] } ] },
+    { queues, [
+        { http_requests, [
+            { regulators,   [ { rate, [ { limit,1000 } ]  },
+            { modifiers,    [ { cpu_feedback,  10} ] } %% 10 = % increment by which to modify the limit
           ]
-        }  
-      ] 
-    }  
+        }
+      ]
+    }
   ]
-}  
+}
 
 ```
- NOTE 1: 10 = Percent increment by which to modify the regulator limit
- 
- NOTE 2: In this example, when CPU usage increases by %27, the sampler will send 70, the percentage to be applied to the predefined limit.  
- The limit becomes 700/second until CPU utilization drops to normal at which point the sampler sends 100 and the limit will go back to original 1000/second
-
 
 Prerequisites
 -------------

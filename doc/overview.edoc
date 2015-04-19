@@ -215,6 +215,171 @@ ok
         {st,{st,45079}}]}
 </pre>
 
+<hr/>
+
+##Scenarios and Corresponding Configuration Examples
+
+####EXAMPLE 1:
+* Add counter regulated queue called <b><i>heavy_crunches</i></b> to limit your cpu intensive code executions to no more than 7 at a time
+
+Configuration:
+<pre lang="erlang">
+{ jobs, [
+    { queues, [
+        { heavy_crunches, [ { regulators, [{ counter, [{ limit, 7 }] } ] }] }
+      ]
+    }
+  ]
+}
+</pre>
+
+Anywhere in your code wrap cpu-intensive work in a call to jobs server and-- <b>voilà!</b> --it is counter-regulated:
+
+<pre lang="erlang">
+jobs:run( heavy_crunches,fun()->my_cpu_intensive_calculation() end)
+</pre>
+
+####EXAMPLE 2:
+* Add rate regulated queue called <b><i>http_requests</i></b> to ensure that your http server gets no more than 1000 requests per second.
+* Additionally, set the queue size to 10,000 (i.e. to control queue memory consumption)
+
+Configuration:
+
+<pre lang="erlang">
+{ jobs, [
+      { queues, [
+            { http_requests, [ { max_size, 10000},  {regulators, [{ rate, [{limit, 1000}]}]}]}
+        ]
+      }
+  ]
+}
+</pre>
+
+Wrap your request entry point in a call to jobs server and it will end up being rate-regulated.
+
+<pre lang="erlang">
+jobs:run(http_requests,fun()->handle_http_request() end)
+</pre>
+
+NOTE: with the config above, once 10,000 requests accumulates in the queue any incoming requests are dropped on the floor.
+
+####EXAMPLE 3:
+* HTTP requests will always have a reasonable execution time.  No point in keeping them in the queue past the timeout.
+
+* Let's create <b><i>patient_user_requests</i></b> queue that will keep requests in the queue for up to 10 seconds
+
+<pre lang="erlang">
+{ patient_user_requests, [
+    { max_time, 10000},
+    { regulators, [{rate, [ { limit, 1000 } ] }
+  ]
+}
+</pre>
+* Let's create <b><i>impatient_user_requests</i></b> queue that will keep requests in the queue for up to 200 milliseconds.
+Additionally, we'll make it a LIFO queue. Unfair, but if we assume that happy/unhappy is a boolean
+we're likely to maximize the happy users!
+
+
+
+<pre lang="erlang">
+{ impatient_user_requests, [
+    { max_time, 200},
+    { type, lifo},
+    { regulators, [{rate, [ { limit, 1000 } ] }
+  ]
+}
+</pre>
+
+NOTE: In order to pace requests from both queues at 1000 per second, use <b>group_rate</b> regulation (EXAMPLE 4)
+
+
+####EXAMPLE 4:
+* Rate regulate http requests from multiple queues
+
+Create <b>group_rates</b> regulator called <b><i>http_request_rate</i></b>  and assign it to both <i>impatient_user_requests</i> and <i>patient_user_requests</i>
+
+<pre lang="erlang">
+{ jobs, [
+    { group_rates,[{ http_request_rate, [{limit,1000}] }] },
+    { queues, [
+        { impatient_user_requests,
+            [ {max_time, 200},
+              {type, lifo},
+              {regulators,[{ group_rate, http_request_rate}]}
+            ]
+        },
+        { patient_user_requests,
+            [ {max_time, 10000},
+              {regulators,[{ group_rate, http_request_rate}
+            ]
+        }
+      ]
+    }
+  ]
+}
+</pre>
+
+####EXAMPLE 5:
+* Can't afford to drop http requests on the floor once max_size is reached?
+* Implement and use your own queue to persist those unfortunate http requests and serve them eventually
+
+
+<pre lang="erlang">
+ -module(my_persistent_queue).
+ -behaviour(jobs_queue).
+ -export([  new/2,
+            delete/1,
+            in/3,
+            out/2,
+            peek/1,
+            info/2,
+            all/1]).
+
+ ## implementation
+ ...
+</pre>
+
+Configuration:
+
+<pre lang="erlang">
+{ jobs, [
+    { queues, [
+        { http_requests, [
+            { mod, my_persistent_queue},
+            { max_size, 10000 },
+            { regulators, [ { rate, [ { limit, 1000 } ] } ] }
+          ]
+        }
+      ]
+    }
+  ]
+}
+</pre>
+
+
+###The use of sampler framework
+1. Get a sampler running and sending feedback to the jobs server.
+2. Apply its feedback to a regulator limit.
+
+####EXAMPLE 6:
+* Adjust rate regulator limit on the fly based on the feedback from <b>jobs_sampler_cpu</b> named <b><i>cpu_feedback</i></b>
+
+<pre lang="erlang">
+{ jobs, [
+    { samplers, [{ cpu_feedback, jobs_sampler_cpu, [] } ] },
+    { queues, [
+        { http_requests, [
+            { regulators,   [ { rate, [ { limit,1000 } ]  },
+            { modifiers,    [ { cpu_feedback,  10} ] } %% 10 = % increment by which to modify the limit
+          ]
+        }
+      ]
+    }
+  ]
+}
+</pre>
+
+
 Prerequisites
 -------------
 This application requires 'exprecs'.
