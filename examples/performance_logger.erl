@@ -122,7 +122,7 @@ handle_cast(ping, State = #state{data_spec = DataSpec}) ->
 handle_cast({start_recording, DataSpec}, State) ->
     ets:delete_all_objects(?PFL_ETS_NAME),
     {ok, TRef} = timer:apply_interval(?SAMPLING_TIME, ?MODULE, tick, []),
-    {noreply, State#state{start_time = erlang:now(),
+    {noreply, State#state{start_time = os:timestamp(),
                           %% we add two default counters, that measure CPU load and memory usage.
                           data_spec = [{fun cpu_load/0, "CPULoad", identity},
                                        {fun memory_use/0, "MemoryUse", identity} | DataSpec],
@@ -183,7 +183,7 @@ calculate_sample(Counters) ->
               Counters).
 
 compute_time_offset(#state{start_time = StartTime}) ->
-    timer:now_diff(erlang:now(), StartTime) * ?TIME_COMPUTATION_SCALE.
+    timer:now_diff(os:timestamp(), StartTime) * ?TIME_COMPUTATION_SCALE.
 
 %%
 save_header(DataSpec, File) ->
