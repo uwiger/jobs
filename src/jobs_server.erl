@@ -690,11 +690,20 @@ i_handle_call({set_modifiers, Modifiers}, _, #st{queues     = Qs,
 						 group_rates = GRs,
 						 counters    = Cs} = S) ->
     GRs1 = [apply_modifiers(Modifiers, G) || G <- GRs],
-    Cs1  = [apply_modifiers(Modifiers, C) || C <- Cs],
     Qs1  = [apply_modifiers(Modifiers, Q) || Q <- Qs],
-    {reply, ok, S#st{queues = Qs1,
-		     group_rates = GRs1,
-		     counters = Cs1}};
+    {Revisit,Cs1}  =
+        lists:foldl(fun(C,{RevAcc,CAcc}) ->
+                            C1 = apply_modifiers(Modifiers, C),
+                            case get_rate(C) < get_rate(C1) of
+                                true -> {union(C1#cr.queues,RevAcc),[C1|CAcc]};
+                                _ -> {RevAcc,[C1|CAcc]}
+                            end
+                    end,{[],[]},Cs),
+    S1 = revisit_queues(Revisit,
+                        S#st{queues = Qs1,
+                             group_rates = GRs1,
+                             counters = lists:reverse(Cs1)}),
+    {reply, ok, S1};
 i_handle_call({add_queue, Name, Options}, _, #st{queues = Qs} = S) ->
     false = get_queue(Name, Qs),
     NewQueues = init_queues([{Name, Options}], S),

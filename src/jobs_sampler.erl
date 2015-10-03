@@ -318,8 +318,9 @@ calc_modifiers(Samplers, #state{modifiers = Modifiers0} = S) ->
 			  sampler_error(Err, Sx),
 			  {Sx, {Acc,Flg}}
 		  end
-	  end, {Modifiers0, false}, Samplers),
-    S#state{samplers = Samplers1, modifiers = Modifiers1, modified = IsModified}.
+	  end, {orddict:new(), false}, Samplers),
+    FinalMods = orddict:merge(fun(_,V,_) -> V end,Modifiers1,Modifiers0),
+    S#state{samplers = Samplers1, modifiers = FinalMods, modified = IsModified}.
 
 
 merge_modifiers(New, Modifiers) ->
