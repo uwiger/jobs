@@ -116,11 +116,11 @@ info(length    , #queue{st = L}) ->
 %%
 %% Return all entries that have been in the queue longer than MaxTime.
 %%
-timedout(#queue{max_time = undefined}) -> [];
+timedout(#queue{max_time = undefined} = Q) -> {[],Q};
 timedout(#queue{max_time = TO} = Q) ->
     timedout(TO, Q).
 
-timedout(_ , #queue{oldest_job = undefined}) -> [];
+timedout(_ , #queue{oldest_job = undefined} = Q) -> {[],Q};
 timedout(TO, #queue{st = L} = Q) ->
     Now = jobs_server:timestamp(),
     {Left, Timedout} = lists:splitwith(fun({TS,_}) ->
