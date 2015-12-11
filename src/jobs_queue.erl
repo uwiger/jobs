@@ -169,8 +169,8 @@ info(oldest_job, #queue{oldest_job = OJ}) -> OJ;
 info(length    , #queue{st = #st{table = Tab}}) ->
     ets:info(Tab, size).
 
--spec timedout(#queue{}) -> [] | {[entry()], #queue{}}.
-%% @spec timedout(#queue{}) -> [] | {[Entry], #queue{}}
+-spec timedout(#queue{}) -> {[entry()], #queue{}}.
+%% @spec timedout(#queue{}) -> {[Entry], #queue{}}
 %% @doc Return all entries that have been in the queue longer than MaxTime.
 %%
 %% NOTE: This is an inspection function; it doesn't remove the job entries.
@@ -180,7 +180,7 @@ timedout(#queue{max_time = undefined} = Q) -> {[], Q};
 timedout(#queue{max_time = TO} = Q) ->
     timedout(TO, Q).
 
-timedout(_ , #queue{oldest_job = undefined}) -> [];
+timedout(_ , #queue{oldest_job = undefined} = Q) -> {[], Q};
 timedout(TO, #queue{st = #st{table = Tab}} = Q) ->
     Now = timestamp(),
     Objs = find_expired(Tab, Now, TO),

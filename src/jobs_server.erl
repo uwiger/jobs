@@ -1017,7 +1017,7 @@ check_timedout(#queue{max_time   = MaxT,
 		      oldest_job = Oldest} = Q, TS) ->
     if (TS - Oldest) > MaxT * 1000 ->
 	    case q_timedout(Q) of
-		[] -> Q;
+		{[],Q1} -> Q1;
 		{OldJobs, Q1} ->
 		    [timeout(J) || J <- OldJobs],
 		    Q1
@@ -1489,9 +1489,9 @@ queue_job(TS, From, #queue{max_size = MaxSz} = Q, S) ->
     CurSz = q_info(length, Q),
     if CurSz >= MaxSz ->
             case q_timedout(Q) of
-                [] ->
+                {[],Q1} ->
                     reject(From),
-                    {Q, S};
+                    {Q1, S};
                 {OldJobs, Q1} ->
                     [timeout(J) || J <- OldJobs],
                     %% update_queue(q_in(TS, From, Q1), S)
@@ -1586,7 +1586,7 @@ init_producer(Type, _Opts, Q) ->
                              state = ModS}}.
 
 q_all     (#queue{mod = Mod} = Q)     -> Mod:all     (Q).
-q_timedout(#queue{mod = Mod} = Q)     -> Mod:timedout(Q).
+q_timedout(#queue{mod = Mod} = Q)     -> case Mod:timedout(Q) of [] -> {[],Q}; X -> X end.
 q_delete  (#queue{mod = undefined})   -> ok;
 q_delete  (#queue{mod = Mod} = Q)     -> Mod:delete  (Q).
 %%
