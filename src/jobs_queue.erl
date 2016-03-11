@@ -102,6 +102,8 @@ representation(
 %% to get rid of it.
 %% @end
 %%
+delete(#queue{st = undefined}) ->
+    ok;
 delete(#queue{st = #st{table = T}}) ->
     ets:delete(T).
 
