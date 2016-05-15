@@ -1657,7 +1657,7 @@ next_time_(TS, #queue{latest_dispatch = TS1,
 %% Microsecond timestamp; never wraps
 timestamp() ->
     %% Invented epoc is {1258,0,0}, or 2009-11-12, 4:26:40
-    {MS,S,US} = erlang:now(),
+    {MS,S,US} = jobs_lib:time_compat(),
     (MS-1258)*1000000000000 + S*1000000 + US.
 
 timestamp_to_datetime(TS) ->

@@ -167,9 +167,9 @@ stop_server() ->
     application:stop(jobs).
 
 tc(F) ->
-    T1 = erlang:now(),
+    T1 = jobs_lib:time_compat(),
     R = (catch F()),
-    T2 = erlang:now(),
+    T2 = jobs_lib:time_compat(),
     {timer:now_diff(T2,T1), R}.
 
 run_jobs(Q,N) ->
