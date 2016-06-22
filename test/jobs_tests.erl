@@ -1,6 +1,7 @@
 -module(jobs_tests).
 
 -compile(export_all).
+-export([with_msg_sampler/1]).
 
 -include_lib("eunit/include/eunit.hrl").
 
@@ -22,8 +23,8 @@ dist_test_() ->
      fun() ->
 	     ?assertEqual(Rate, with_msg_sampler(Rate)),
 	     Remote = start_slave(Name),
-	     ?assertEqual(Rate,
-			  rpc:call(Remote, ?MODULE, with_msg_sampler, [Rate])),
+             RpcRes = rpc:call(Remote, ?MODULE, with_msg_sampler, [Rate]),
+	     ?assertEqual(Rate, RpcRes),
 	     {Remote, Rate}
      end,
      fun({Remote, _}) ->
@@ -64,7 +65,9 @@ start_slave(Name) ->
 	_ ->
 	    ok
     end,
-    {ok, Node} = slave:start(host(), Name, "-pa . -pz ../ebin"),
+    D1 = filename:absname(code:lib_dir(jobs, test)),
+    D2 = filename:absname(code:lib_dir(jobs, ebin)),
+    {ok, Node} = slave:start(host(), Name, "-pa " ++ D1 ++ " -pz " ++ D2),
     io:fwrite(user, "Slave node: ~p~n", [Node]),
     Node.
 
@@ -78,7 +81,8 @@ stop_jobs() ->
     application:stop(jobs).
 
 apply_feedback(Rate) when is_integer(Rate) ->
-    ?assertEqual(R0=get_rate(), Rate),
+    R0 = get_rate(),
+    ?assertEqual(R0, Rate),
     io:fwrite(user, "R0 = ~p~n", [R0]),
     kick_sampler(1),
     io:fwrite(user, "get_rate() -> ~p~n", [get_rate()]),
@@ -90,7 +94,8 @@ apply_feedback(Rate) when is_integer(Rate) ->
     io:fwrite(user, "get_rate() -> ~p~n", [get_rate()]),
     ?assertEqual(get_rate(), Rate - 30);
 apply_feedback({Remote, Rate}) ->
-    ?assertEqual(R0=get_rate(), Rate),
+    R0=get_rate(),
+    ?assertEqual(R0, Rate),
     io:fwrite(user, "R0 = ~p~n", [R0]),
     ?assertEqual(rpc:call(Remote,?MODULE,get_rate,[]), Rate),
     kick_sampler(Remote, 1),
