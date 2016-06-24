@@ -1,0 +1,14 @@
+%% -*- erlang-mode -*-
+IsRebar3 = erlang:function_exported(rebar3, main, 1).
+
+case IsRebar3 of
+    false ->
+	{_, Profs} = lists:keyfind(profiles, 1, CONFIG),
+	{_, Test} = lists:keyfind(test, 1, Profs),
+	{_, Deps} = lists:keyfind(deps, 1, Test),
+	{_, OrigDeps} = lists:keyfind(deps, 1, CONFIG),
+	lists:keyreplace(deps, 1, CONFIG, {deps, OrigDeps ++ Deps});
+    true ->
+	CONFIG
+end.
+
