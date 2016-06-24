@@ -227,6 +227,7 @@ ok
 
 ####EXAMPLE 1:
 * Add counter regulated queue called ___heavy_crunches___ to limit your cpu intensive code executions to no more than 7 at a time
+
 Configuration:
 
 ```erlang
@@ -291,7 +292,6 @@ NOTE: with the config above, once 10,000 requests accumulates in the queue any i
 }
 
 ```
-
 
 * Let's create ___impatient_user_requests___ queue that will keep requests in the queue for up to 200 milliseconds.
 Additionally, we'll make it a LIFO queue. Unfair, but if we assume that happy/unhappy is a boolean
@@ -410,6 +410,7 @@ The 'exprecs' module is part of http://github.com/uwiger/parse_trans
 Contribute
 ----------
 For issues, comments or feedback please [create an issue!] [1]
+
 [1]: http://github.com/uwiger/jobs/issues "jobs issues"
 
 

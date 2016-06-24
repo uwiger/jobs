@@ -17,7 +17,6 @@ __Authors:__ : Ulf Wiger ([`ulf@wiger.net`](mailto:ulf@wiger.net)).
 ### <a name="type-entry">entry()</a> ###
 
 
-
 <pre><code>
 entry() = {<a href="#type-timestamp">timestamp()</a>, <a href="#type-job">job()</a>}
 </code></pre>
@@ -25,9 +24,7 @@ entry() = {<a href="#type-timestamp">timestamp()</a>, <a href="#type-job">job()<
 
 
 
-
 ### <a name="type-info_item">info_item()</a> ###
-
 
 
 <pre><code>
@@ -37,15 +34,12 @@ info_item() = max_time | oldest_job | length
 
 
 
-
 ### <a name="type-job">job()</a> ###
-
 
 
 <pre><code>
 job() = {pid(), reference()}
 </code></pre>
-
 
 <a name="index"></a>
 
@@ -63,12 +57,10 @@ job() = {pid(), reference()}
 
 ### all/1 ###
 
-
 <pre><code>
 all(Queue::#queue{}) -&gt; [<a href="#type-entry">entry()</a>]
 </code></pre>
 <br />
-
 
 <a name="delete-1"></a>
 
@@ -76,46 +68,38 @@ all(Queue::#queue{}) -&gt; [<a href="#type-entry">entry()</a>]
 
 `delete(Queue) -> any()`
 
-
 <a name="empty-1"></a>
 
 ### empty/1 ###
 
 `empty(Queue) -> any()`
 
-
 <a name="in-3"></a>
 
 ### in/3 ###
-
 
 <pre><code>
 in(TS::<a href="#type-timestamp">timestamp()</a>, Job::<a href="#type-job">job()</a>, Queue::#queue{}) -&gt; #queue{}
 </code></pre>
 <br />
 
-
 <a name="info-2"></a>
 
 ### info/2 ###
-
 
 <pre><code>
 info(X1::<a href="#type-info_item">info_item()</a>, Queue::#queue{}) -&gt; any()
 </code></pre>
 <br />
 
-
 <a name="is_empty-1"></a>
 
 ### is_empty/1 ###
-
 
 <pre><code>
 is_empty(Queue::#queue{}) -&gt; boolean()
 </code></pre>
 <br />
-
 
 <a name="new-2"></a>
 
@@ -123,17 +107,14 @@ is_empty(Queue::#queue{}) -&gt; boolean()
 
 `new(Options, Q) -> any()`
 
-
 <a name="out-2"></a>
 
 ### out/2 ###
-
 
 <pre><code>
 out(N::integer(), Queue::#queue{}) -&gt; {[<a href="#type-entry">entry()</a>], #queue{}}
 </code></pre>
 <br />
-
 
 <a name="peek-1"></a>
 
@@ -141,29 +122,24 @@ out(N::integer(), Queue::#queue{}) -&gt; {[<a href="#type-entry">entry()</a>], #
 
 `peek(Queue) -> any()`
 
-
 <a name="representation-1"></a>
 
 ### representation/1 ###
 
 `representation(Queue) -> any()`
 
-
 <a name="timedout-1"></a>
 
 ### timedout/1 ###
-
 
 <pre><code>
 timedout(Queue::#queue{}) -&gt; {[<a href="#type-entry">entry()</a>], #queue{}}
 </code></pre>
 <br />
 
-
 <a name="timedout-2"></a>
 
 ### timedout/2 ###
 
 `timedout(TO, Queue) -> any()`
-
 

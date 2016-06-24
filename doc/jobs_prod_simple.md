@@ -4,7 +4,6 @@
 * [Function Index](#index)
 * [Function Details](#functions)
 
-
 <a name="index"></a>
 
 ## Function Index ##
@@ -23,11 +22,9 @@
 
 `init(F, Info) -> any()`
 
-
 <a name="next-3"></a>
 
 ### next/3 ###
 
 `next(Opaque, Stateful, Info) -> any()`
-
 

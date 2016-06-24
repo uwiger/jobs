@@ -4,7 +4,6 @@
 * [Function Index](#index)
 * [Function Details](#functions)
 
-
 <a name="index"></a>
 
 ## Function Index ##
@@ -23,13 +22,11 @@
 
 `add(Entry, Jsh) -> any()`
 
-
 <a name="from_list-2"></a>
 
 ### from_list/2 ###
 
 `from_list(MaxL, L0) -> any()`
-
 
 <a name="new-1"></a>
 
@@ -37,18 +34,15 @@
 
 `new(Length) -> any()`
 
-
 <a name="take_last-2"></a>
 
 ### take_last/2 ###
 
 `take_last(F, Jsh) -> any()`
 
-
 <a name="to_list-1"></a>
 
 ### to_list/1 ###
 
 `to_list(Jsh) -> any()`
-
 

@@ -7,6 +7,7 @@
 __Behaviours:__ [`jobs_sampler`](jobs_sampler.md).
 
 __Authors:__ : Ulf Wiger ([`ulf@wiger.net`](mailto:ulf@wiger.net)).
+
 <a name="index"></a>
 
 ## Function Index ##
@@ -25,13 +26,11 @@ __Authors:__ : Ulf Wiger ([`ulf@wiger.net`](mailto:ulf@wiger.net)).
 
 `calc(History, St) -> any()`
 
-
 <a name="handle_msg-3"></a>
 
 ### handle_msg/3 ###
 
 `handle_msg(Msg, Timestamp, ModS) -> any()`
-
 
 <a name="init-2"></a>
 
@@ -39,11 +38,9 @@ __Authors:__ : Ulf Wiger ([`ulf@wiger.net`](mailto:ulf@wiger.net)).
 
 `init(Name, Opts) -> any()`
 
-
 <a name="sample-2"></a>
 
 ### sample/2 ###
 
 `sample(Timestamp, St) -> any()`
-
 

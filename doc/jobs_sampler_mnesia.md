@@ -5,6 +5,7 @@
 * [Function Details](#functions)
 
 __Behaviours:__ [`jobs_sampler`](jobs_sampler.md).
+
 <a name="index"></a>
 
 ## Function Index ##
@@ -23,13 +24,11 @@ __Behaviours:__ [`jobs_sampler`](jobs_sampler.md).
 
 `calc(History, St) -> any()`
 
-
 <a name="handle_msg-3"></a>
 
 ### handle_msg/3 ###
 
 `handle_msg(X1, T, S) -> any()`
-
 
 <a name="init-2"></a>
 
@@ -37,11 +36,9 @@ __Behaviours:__ [`jobs_sampler`](jobs_sampler.md).
 
 `init(Name, Opts) -> any()`
 
-
 <a name="sample-2"></a>
 
 ### sample/2 ###
 
 `sample(T, S) -> any()`
-
 
