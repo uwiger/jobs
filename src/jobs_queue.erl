@@ -259,4 +259,4 @@ empty(#queue{st = #st{table = T}} = Q) ->
 
 is_expired(TS, Now, TO) ->
     MS = Now - TS,
-    MS > TO.
+    MS > TO * 1000.
