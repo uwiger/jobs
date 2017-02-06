@@ -34,8 +34,8 @@
                     | {group_rates, [{q_name(), [option()]}]}
 		    | {counters,    [{q_name(), [option()]}]}
 		    | {interval, integer()}
-            | {max_time, non_neg_integer()}
-            | {max_size, non_neg_integer()}.
+            | {max_time, integer() | undefined}
+            | {max_size, integer() | undefined}.
 -type timestamp() :: integer().  % microseconds with a special epoch
 
 -type q_name() :: any().
