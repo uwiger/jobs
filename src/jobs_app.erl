@@ -65,6 +65,7 @@
 %% of job requests) of the queue. If the queue has reached the maximum length,
 %% subsequent job requests will be rejected unless it is possible to remove
 %% enough requests that have exceeded the maximum allowed time in the queue.
+%%  If `undefined', no limit is imposed.
 %%
 %% `{regulators, [{regulator_type(), Opts]}' specifies the regulation
 %% characteristics of the queue.

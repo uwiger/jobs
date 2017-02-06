@@ -33,7 +33,9 @@
 		    | {config, file:name()}
                     | {group_rates, [{q_name(), [option()]}]}
 		    | {counters,    [{q_name(), [option()]}]}
-		    | {interval, integer()}.
+		    | {interval, integer()}
+            | {max_time, integer() | undefined}
+            | {max_size, integer() | undefined}.
 -type timestamp() :: integer().  % microseconds with a special epoch
 
 -type q_name() :: any().
