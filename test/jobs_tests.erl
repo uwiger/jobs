@@ -72,7 +72,7 @@ start_slave(Name) ->
     Node.
 
 host() ->
-    [Name, Host] = re:split(atom_to_list(node()), "@", [{return, list}]),
+    [_Name, Host] = re:split(atom_to_list(node()), "@", [{return, list}]),
     list_to_atom(Host).
 
 
