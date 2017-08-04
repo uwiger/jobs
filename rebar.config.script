@@ -1,15 +1,14 @@
 %% -*- erlang-indent-level: 4; indent-tabs-mode: nil -*-
 IsRebar3 = erlang:function_exported(rebar3, main, 1).
-{_, Profs} = lists:keyfind(profiles, 1, CONFIG),
 case IsRebar3 of
     false ->
-	{_, Test} = lists:keyfind(test, 1, Profs),
-	{_, Deps} = lists:keyfind(deps, 1, Test),
-	{_, OrigDeps} = lists:keyfind(deps, 1, CONFIG),
-	lists:keyreplace(deps, 1, CONFIG, {deps, OrigDeps ++ Deps});
+	{_, Profs} = lists:keyfind(profiles, 1, CONFIG),
+	{_, R2} = lists:keyfind(rebar2, 1, Profs),
+	lists:foldl(
+	  fun({K,V}, Acc) ->
+		  lists:keyreplace(K, 1, Acc, {K, V})
+	  end, CONFIG, R2);
     true ->
-	{_, Def} = lists:keyfind(default, 1, Profs),
-	{_, Deps} = lists:keyfind(deps, 1, Def),
-	lists:keyreplace(deps, 1, CONFIG, {deps, Deps})
+	CONFIG
 end.
 
