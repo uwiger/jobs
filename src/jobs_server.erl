@@ -741,10 +741,10 @@ i_handle_call({delete_queue, Name}, _, #st{queues = Qs} = S) ->
     end;
 i_handle_call({info, Item}, _, S) ->
     {reply, get_info(Item, S), S};
-i_handle_call({queue_info, Name}, _, #st{queues = Qs} = S) ->
-    {reply, get_queue_info(Name, Qs), S};
-i_handle_call({queue_info, Name, Item}, _, #st{queues = Qs} = S) ->
-    {reply, get_queue_info(Name, Item, Qs), S};
+i_handle_call({queue_info, Name}, _, #st{} = S) ->
+    {reply, get_queue_info(Name, S), S};
+i_handle_call({queue_info, Name, Item}, _, #st{} = S) ->
+    {reply, get_queue_info(Name, Item, S), S};
 i_handle_call({modify_regulator, Type, Qname, RegName, Opts}, _, S) ->
     case get_queue(Qname, S#st.queues) of
         #queue{} = Q ->
@@ -899,37 +899,49 @@ code_change(_FromVsn, St, _Extra) ->
 
 %% Internal functions
 
-get_info(queues, #st{queues = Qs}) ->
-    jobs_info:pp(Qs);
+get_info(queues, #st{queues = Qs} = S) ->
+    [get_queue_info(Name, S)
+     || #queue{name = Name} <- Qs];
 get_info(group_rates, #st{group_rates = Gs}) ->
     jobs_info:pp(Gs);
 get_info(counters, #st{counters = Cs}) ->
-    jobs_info:pp(Cs).
+    jobs_info:pp(Cs);
+get_info(monitors, #st{monitors = Mons}) ->
+    ets:tab2list(Mons).
 
-get_queue_info(Name, Qs) ->
+get_queue_info(Name, #st{queues = Qs} = S) ->
     case get_queue(Name, Qs) of
         false ->
             undefined;
-	Other ->
-	    jobs_info:pp(Other)
+	Q ->
+	    {queue, Info} = jobs_info:pp(Q),
+            {queue, Info ++ [{producers, do_get_queue_info(producers, Q, S)}]}
     end.
 
-get_queue_info(Name, Item, Qs) ->
+get_queue_info(Name, Item, #st{queues = Qs} = S) ->
     case get_queue(Name, Qs) of
 	false ->
 	    undefined;
 	Q ->
-	    do_get_queue_info(Item, Q)
+	    do_get_queue_info(Item, Q, S)
     end.
 
-do_get_queue_info(rate_limit, #queue{regulators = Rs}) ->
+do_get_queue_info(rate_limit, #queue{regulators = Rs}, _) ->
     case lists:keyfind(rr, 1, Rs) of
 	#rr{rate = #rate{limit = Limit}} ->
 	    Limit;
 	false ->
 	    undefined
     end;
-do_get_queue_info(Item, Q) ->
+do_get_queue_info(producers, #queue{name = Name, type = Type},
+                  #st{monitors = Mons}) ->
+    case Type of
+        #producer{} ->
+            ets:select(Mons, [{ {{'$1','_'}, Name}, [], ['$1'] }]);
+        _ ->
+            []
+    end;
+do_get_queue_info(Item, Q, _) ->
     jobs_info:'#get-queue'(Item, Q).
 
 get_queue(Name, Qs) ->
