@@ -234,8 +234,8 @@ call(Server, Req, Timeout) ->
 %% approve(From) ->
 %%     approve(From, []).
 
-approve(From, Counter) ->
-    gen_server:reply(From, {ok, Counter}).
+approve(From, Counters) ->
+    gen_server:reply(From, {ok, Counters}).
 
 
 reject(From) ->
