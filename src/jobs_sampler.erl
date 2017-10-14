@@ -32,7 +32,6 @@
 	 calc/3]).
 
 -export([init/1,
-	 behaviour_info/1,
 	 handle_call/3,
 	 handle_cast/2,
 	 handle_info/2,
@@ -60,12 +59,11 @@
 		remote_modifiers = []}).
 
 
-behaviour_info(callbacks) ->
-    [{init, 2},
-     {sample, 2},
-     {handle_msg, 3},
-     {calc, 2}].
-
+-callback init(Name :: any(), Opts :: proplists:proplist()) -> {ok, State :: any()}.
+-callback sample(Timestamp :: integer(), State :: any()) -> {Result :: any(), State :: any()}.
+-callback handle_msg(Msg :: any(), Timestamp :: integer(), State :: any())
+    -> {ignore, State :: any()} | {log, Sample :: any(), State :: any()}.
+-callback calc(History :: any(), State :: any()) -> {Modifiers :: q_modifiers(), State :: any()}.
 
 trigger_sample() ->
     gen_server:cast(?MODULE, sample).
