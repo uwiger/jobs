@@ -89,7 +89,7 @@ ask() ->
     ask(default).
 
 
--spec ask(job_class()) -> {ok, counter()} | {error, rejected | timeout}.
+-spec ask(job_class()) -> {ok, reg_obj()} | {error, rejected | timeout}.
 %%
 ask(Type) ->
     call(?SERVER, {ask, Type}, infinity).
@@ -122,7 +122,7 @@ run(Type, Fun) when is_function(Fun, 1) ->
             erlang:error(Reason)
     end.
 
--spec done(counter()) -> ok.
+-spec done(reg_obj()) -> ok.
 %%
 done({undefined, _}) ->
     %% no monitoring on this job (e.g. from a {action, approve} queue)

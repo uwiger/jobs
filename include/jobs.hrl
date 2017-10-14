@@ -26,8 +26,6 @@
 -export_type([counter/0, reg_obj/0]).
 
 -type job_class() :: any().
--opaque counter() :: {any(), any()}.
--opaque reg_obj() :: [counter()].
 
 -type mod_args() :: {atom(), list()}.
 -type mod_fun() :: {atom(), atom()}.
@@ -126,6 +124,9 @@
      % active_modifiers = []  :: [{atom(),integer()}],
          % preset_limit = 5,
          shared = false}).
+
+-opaque counter() :: {#cr{}, non_neg_integer()}.
+-opaque reg_obj() :: {reference(), [{info, any()} | {counters, [counter()]}]}.
 
 -record(grp, {name,
           rate = #rate{},
