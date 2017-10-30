@@ -145,12 +145,12 @@ dequeue(Type, N) when N==infinity; is_integer(N), N > 0 ->
     call(?SERVER, {dequeue, Type, N}, infinity).
 
 
--spec add_queue(queue_name(), [option()]) -> ok.
+-spec add_queue(queue_name(), q_opts()) -> ok.
 %%
 add_queue(Name, Options) ->
     call(?SERVER, {add_queue, Name, Options}).
 
--spec modify_queue(queue_name(), [option()]) -> ok.
+-spec modify_queue(queue_name(), q_opts()) -> ok.
 %%
 modify_queue(Name, Options) ->
     call(?SERVER, {modify_queue, Name, Options}).
@@ -252,7 +252,8 @@ timeout({_, {Pid,Ref} = From}) when is_pid(Pid), is_reference(Ref) ->
 start_link() ->
     start_link(options()).
 
--spec start_link([option()]) -> {ok, pid()}.
+-type ctx_options() :: [{_Ctxt :: env | opts, _App:: user | atom(), [option()]}].
+-spec start_link(ctx_options()) -> {ok, pid()}.
 %%
 start_link(Opts0) when is_list(Opts0) ->
     Opts = expand_opts(sort_groups(group_opts(Opts0))),
@@ -260,7 +261,7 @@ start_link(Opts0) when is_list(Opts0) ->
 
 %% Server-side callbacks and helpers
 
--spec options() -> [{_Ctxt :: env | opts, _App:: user | atom(), [option()]}].
+-spec options() -> ctx_options().
 options() ->
     JobsOpts = {env, jobs, application:get_all_env(jobs)},
     Other = try [{env, A, Os} || {A, Os} <- setup:find_env_vars(jobs)]
@@ -291,7 +292,7 @@ sort_groups(Gs) ->
     [Jobs] = [J || {env, jobs, _} = J <- Gs],
     User ++ [Jobs | Gs -- [Jobs | User]].
 
--spec expand_opts([option()]) -> [option()].
+-spec expand_opts(ctx_options()) -> ctx_options().
 %%
 expand_opts([{Ctxt, A, Opts}|T]) ->
     Exp = try expand_opts_(Opts)
@@ -1203,7 +1204,7 @@ check_cr(Val, I, Max) ->
     end.
 
 -spec dispatch_N(integer() | infinity, [any()], integer(), #queue{}, #st{}) ->
-			{list(), #queue{}}.
+			{integer(), list(), #queue{}}.
 %%
 dispatch_N(N, Counters, TS, #queue{name = QName,
 				    approved = Approved0,
