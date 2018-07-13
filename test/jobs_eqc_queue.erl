@@ -4,7 +4,7 @@
 -include_lib("eqc/include/eqc.hrl").
 -include("jobs.hrl").
 
--compile(export_all).
+-compile([export_all, nowarn_export_all]).
 
 -record(model,
         { time = jobs_lib:timestamp(),
