@@ -2,7 +2,7 @@
 
 -include("jobs.hrl").
 
--compile(export_all).
+-compile([export_all, nowarn_export_all]).
 
 new(Options, Q) ->
     case proplists:get_value(type, Options) of

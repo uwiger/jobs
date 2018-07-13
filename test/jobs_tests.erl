@@ -1,6 +1,6 @@
 -module(jobs_tests).
 
--compile(export_all).
+-compile([export_all, nowarn_export_all]).
 -export([with_msg_sampler/1]).
 
 -include_lib("eunit/include/eunit.hrl").

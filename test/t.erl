@@ -1,6 +1,6 @@
 -module(t).
 
--compile(export_all).
+-compile([export_all, nowarn_export_all]).
 
 t() ->
     t(300).
