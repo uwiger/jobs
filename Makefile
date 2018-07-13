@@ -1,38 +1,20 @@
-DIALYZER=dialyzer
+REBAR3=$(shell which rebar3 || echo ./rebar3)
 
-.PHONY: all test clean plt analyze doc test-console
+.PHONY: all test clean doc dialyzer
 
-all: deps compile
-
-deps:
-	rebar get-deps
+all: compile
 
 compile:
-	rebar compile
+	$(REBAR3) compile
 
 test: all
-	rebar eunit skip_deps=true
+	$(REBAR3) eunit
 
 clean:
-	rebar clean
+	$(REBAR3) clean
 
 doc:
-	rebar doc
+	$(REBAR3) doc
 
-test-console:
-	erlc -I include -o test test/*.erl
-	erl -pa deps/*/ebin ebin test
-
-plt: deps compile
-	$(DIALYZER) --build_plt --output_plt .jobs.plt \
-		-pa deps/*/ebin \
-		deps/*/ebin \
-		--apps kernel stdlib sasl inets crypto \
-		public_key ssl runtime_tools erts \
-		compiler tools syntax_tools hipe webtool
-
-analyze: compile
-	$(DIALYZER) --no_check_plt \
-		     ebin \
-		--plt .jobs.plt
-
+dialyzer:
+	$(REBAR3) dialyzer

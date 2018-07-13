@@ -6,3 +6,4 @@ ebin/jobs.app
 /.jobs.plt
 .eunit
 .rebar
+_build
