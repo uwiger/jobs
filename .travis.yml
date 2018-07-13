@@ -1,0 +1,12 @@
+language: erlang
+sudo: false
+otp_release:
+- 21.0
+- 20.3
+- 19.3
+- 18.3
+script:
+- rebar3 eunit
+notifications:
+  email:
+    on_success: never
