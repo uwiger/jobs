@@ -22,6 +22,8 @@ rate_test_() ->
        %% , {[{rate,100},
        %% 	   {group,50}], fun(O,_) -> [fun() -> max_rate_test(O,1) end] end}
        , {{count,3}, fun(_,_) -> [fun() -> counter_run(30,1) end] end}
+       , {[{rate,5},{count,3}],
+          fun(_,_) -> [fun() -> par_run(5,5,1) end] end}
        , {{timeout,500}, fun(_,_) -> [fun() ->
 					      ?debugVal(timeout_test(500))
 				      end] end}
@@ -110,13 +112,13 @@ start_test_server(Conf) ->
 
 start_test_server(Silent, {rate,Rate}) ->
     start_with_conf(Silent, [{queues, [{q, [{regulators,
-					     [{rate,[
-						     {limit, Rate}]
-					      }]}
-					    %% , {mod, jobs_queue_list}
-					   ]}
-				      ]}
-			    ]),
+                                             [{rate,[
+                                                     {limit, Rate}]
+                                              }]}
+                                            %% , {mod, jobs_queue_list}
+                                           ]}
+                                      ]}
+                            ]),
     Rate;
 start_test_server(Silent, [{rate,Rate},{group,Grp}]) ->
     start_with_conf(Silent,
@@ -131,13 +133,10 @@ start_test_server(Silent, [{rate,Rate},{group,Grp}]) ->
 start_test_server(Silent, {count, Count}) ->
     start_with_conf(Silent,
 		    [{queues, [{q, [{regulators,
-				     [{counter,[
-						{limit, Count}
-					       ]
-				      }]}
-				   ]}
-			      ]}
-		    ]);
+                                     [reg({count, Count})]
+                                    }]
+                               }]
+                     }]);
 start_test_server(Silent, {timeout, T}) ->
     start_with_conf(Silent,
 		    [{queues, [{q, [{regulators,
@@ -148,7 +147,20 @@ start_test_server(Silent, {timeout, T}) ->
 				    {max_time, T}
 				   ]}
 			      ]}
-		    ]).
+		    ]);
+start_test_server(Silent, [_|_] = Rs) ->
+    start_with_conf(Silent,
+                    [{queues, [{q,
+                                [{regulators, [reg(R) || R <- Rs]}]
+                               }]
+                     }]).
+
+
+reg({rate, R}) ->
+    {rate, [{limit, R}]};
+reg({count, C}) ->
+    {counter, [{limit, C}]}.
+
 
 
 start_with_conf(Silent, Conf) ->
