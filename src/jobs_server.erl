@@ -884,12 +884,21 @@ handle_info({'DOWN', Ref, _, Pid, _}, #st{monitors = Mons} = S) ->
 	[] ->
 	    {noreply, S}
     end;
+handle_info({revisit_queue, Name}, #st{queues = Qs} = S) ->
+    case get_queue(Name, Qs) of
+        #queue{timer = undefined} = Q ->
+            TS = timestamp(),
+            {Q1, S1} = perform_queue_check(Q, TS, S),
+            {noreply, update_queue(Q1, S1)};
+        _ ->
+            {noreply, S}
+    end;
 handle_info({check_queue, Name}, #st{queues = Qs} = S) ->
     case get_queue(Name, Qs) of
         #queue{} = Q ->
             TS = timestamp(),
-	    {Q1, S1} = perform_queue_check(Q#queue{timer = undefined}, TS, S),
-	    {noreply, update_queue(restart_timer(Q1), S1)};
+            {Q1, S1} = perform_queue_check(Q#queue{timer = undefined}, TS, S),
+            {noreply, update_queue(Q1, S1)};
         _ ->
             {noreply, S}
     end;
@@ -1347,7 +1356,12 @@ union(L1, L2) ->
     (L1 -- L2) ++ L2.
 
 revisit_queues(Qs, S) ->
-    Expanded = [{Q, get_latest_dispatch(Q, S)} || Q <- Qs],
+    Expanded = [{QN, Q#queue.latest_dispatch} ||
+                   QN <- Qs,
+                   Q <- S#st.queues,
+                   QN == Q#queue.name
+                       andalso
+                       Q#queue.timer == undefined],
     [revisit_queue(Q) || {Q,_} <- lists:keysort(2, Expanded)],
     S.
 
@@ -1357,7 +1371,7 @@ get_latest_dispatch(Q, #st{queues = Qs}) ->
     Tl.
 
 revisit_queue(Qname) ->
-    self() ! {check_queue, Qname}.
+    self() ! {revisit_queue, Qname}.
 
 update_queue(#queue{name = N, type = T} = Q, #st{queues = Qs} = S) ->
     Q1 = case T of
@@ -1376,8 +1390,8 @@ kick_producers(#st{queues = Qs} = S) ->
       end, Qs),
     S.
 
-restart_timer(Q) ->
-    start_timer(maybe_cancel_timer(Q)).
+%% restart_timer(Q) ->
+%%     start_timer(maybe_cancel_timer(Q)).
 
 start_timer(#queue{timer = TRef} = Q) when TRef =/= undefined ->
     Q;
