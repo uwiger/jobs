@@ -68,7 +68,7 @@
 -import(proplists, [get_value/3]).
 
 -include("jobs.hrl").
--record(st, {queues      = []  :: [#queue{}],
+-record(st, {queues      = []  :: [#queue{}] | [tuple()],
 	     group_rates = []  :: [#grp{}],
 	     counters    = []  :: [#cr{}],
 	     monitors,
@@ -77,6 +77,11 @@
 	     default_queue,
 	     info_f}).
 
+-record(q_check, {n = 0,
+                  empty = false,
+                  depleted = false,
+                  counters = [],
+                  regulators = []}).
 
 -define(SERVER, ?MODULE).
 
@@ -657,8 +662,8 @@ i_handle_call({ask, Type}, From, #st{queues = Qs} = S) ->
 	#queue{type = #producer{}} ->
 	    {reply, badarg, S1};
         #queue{} = Q ->
-            {Q2, S2} = queue_job(TS, From, Q, S1),
-	    {noreply, update_queue(Q2, S2)};
+            {Q2, QC, S2} = queue_job(TS, From, Q, S1),
+	    {noreply, update_queue(Q2, QC, S2)};
         false ->
             {reply, badarg, S1}
     end;
@@ -888,8 +893,8 @@ handle_info({revisit_queue, Name}, #st{queues = Qs} = S) ->
     case get_queue(Name, Qs) of
         #queue{timer = undefined} = Q ->
             TS = timestamp(),
-            {Q1, S1} = perform_queue_check(Q, TS, S),
-            {noreply, update_queue(Q1, S1)};
+            {Q1, QC, S1} = perform_queue_check(Q, TS, S),
+            {noreply, update_queue(Q1, QC, S1)};
         _ ->
             {noreply, S}
     end;
@@ -897,8 +902,9 @@ handle_info({check_queue, Name}, #st{queues = Qs} = S) ->
     case get_queue(Name, Qs) of
         #queue{} = Q ->
             TS = timestamp(),
-            {Q1, S1} = perform_queue_check(Q#queue{timer = undefined}, TS, S),
-            {noreply, update_queue(Q1, S1)};
+            {Q1, QC, S1} = perform_queue_check(
+                             Q#queue{timer = undefined}, TS, S),
+            {noreply, update_queue(Q1, QC, S1)};
         _ ->
             {noreply, S}
     end;
@@ -910,8 +916,34 @@ terminate(_,_) ->
     ok.
 
 code_change(_FromVsn, St, _Extra) ->
-    {ok, set_info(St)}.
+    {ok, set_info(convert_queues(St))}.
 
+convert_queues(#st{queues = Qs} = St) ->
+    St#st{queues = [convert_queue(Q) || Q <- Qs]}.
+
+-spec convert_queue(#queue{} | tuple()) -> #queue{}.
+convert_queue(#queue{} = Q) ->
+    Q;
+convert_queue({queue,Name,Mod,Type,Group,Regs,MaxT,MaxSz,
+              TL,Approved,Queued,CheckI,Oldest,Timer,CheckC,Waiters,
+               Stateful,St}) ->
+    #queue{name            = Name,
+           mod             = Mod,
+           type            = Type,
+           group           = Group,
+           regulators      = Regs,
+           max_time        = MaxT,
+           max_size        = MaxSz,
+           latest_dispatch = TL,
+           approved        = Approved,
+           queued          = Queued,
+           check_interval  = CheckI,
+           oldest_job      = Oldest,
+           timer           = Timer,
+           check_counter   = CheckC,
+           waiters         = Waiters,
+           stateful        = Stateful,
+           st              = St}.
 
 %% Internal functions
 
@@ -1033,10 +1065,12 @@ job_queued(#queue{check_counter = Ctr} = Q, PrevSz, Overload, TS, S) ->
             perform_queue_check(Q, TS, S);
         C ->
             Q1 = Q#queue{check_counter = C},
-            if PrevSz == 0 ->
+            if PrevSz == 0, Q#queue.timer == undefined ->
                     perform_queue_check(Q1, TS, S);
                true ->
-                    {Q#queue{check_counter = C}, S}
+                    Depleted = Q#queue.depleted,
+                    {Q#queue{check_counter = C, empty = false},
+                     #q_check{depleted = Depleted}, S}
             end
     end.
 
@@ -1059,11 +1093,14 @@ check_timedout(#queue{max_time   = MaxT,
 perform_queue_check(Q, TS, S) ->
     Q1 = check_timedout(maybe_cancel_timer(Q#queue{check_counter = 0}), TS),
     case check_queue(Q1, TS, S) of
-        {0, _, _} ->
-            {Q1, S};
-        {N, Counters, Regs} when N > 0 ->
+        #q_check{n = 0} = QC ->
+            {Q1, QC, S};
+        #q_check{n = N,
+                 counters = Counters,
+                 regulators = Regs} = QC when N > 0 ->
             {Nd, _Jobs, Q2} = dispatch_N(N, Counters, TS, Q1, S),
-            {_Q3, _S3} = update_counters_and_regs(Nd, Counters, Regs, Q2, S);
+            {Q3, S3} = update_counters_and_regs(Nd, Counters, Regs, Q2, S),
+            {Q3, QC, S3};
         Bad ->
             erlang:error({bad_N, Bad})
     end.
@@ -1075,23 +1112,22 @@ maybe_cancel_timer(#queue{timer = TRef} = Q) ->
     Q#queue{timer = undefined}.
 
 check_queue(#queue{type = {action, approve}}, _TS, _S) ->
-    {0, [], []};
+    #q_check{};
 check_queue(#queue{type = #producer{}} = Q, TS, S) ->
     do_check_queue(Q, TS, S);
 check_queue(#queue{} = Q, TS, S) ->
     case q_is_empty(Q) of
         true ->
             %% no action necessary
-            {0, [], []};
+            #q_check{empty = true};
         false ->
             %% non-empty queue
-	    do_check_queue(Q, TS, S)
+            do_check_queue(Q, TS, S)
     end.
 
 do_check_queue(#queue{regulators = Regs0} = Q, TS, S) ->
     Regs = expand_regulators(Regs0, S),
-    {N, Counters} = check_regulators(Regs, TS, Q),
-    {N, Counters, Regs}.
+    check_regulators(Regs, TS, Q, #q_check{regulators = Regs}).
 
 
 -type exp_regulator() :: {#cr{}, integer() | undefined} | #rr{} | #grp{}.
@@ -1156,41 +1192,43 @@ update_regulators(Regs, Q0, S0) ->
       end, {Q0, S0}, Regs).
 
 
--spec check_regulators([exp_regulator()], timestamp(), #queue{}) ->
-			      {integer(), [any()]}.
+-spec check_regulators([exp_regulator()], timestamp(), #queue{}, #q_check{}) ->
+                              #q_check{}.
 %%
-check_regulators(Regs, TS, #queue{latest_dispatch = TL}) ->
-    case check_regulators(Regs, TS, TL, undefined, []) of
-	{undefined, _} ->
-	    {0, []};
-	Other ->
-	    Other
-    end.
+check_regulators(Regs, TS, #queue{latest_dispatch = TL}, QC) ->
+    check_regulators(Regs, TS, TL, undefined, [], QC).
+    %%     {undefined, _} ->
+    %%         {0, []};
+    %%     Other ->
+    %%         Other
+    %% end.
 
-check_regulators([R|Regs], TS, TL, N, Cs) ->
+check_regulators([R|Regs], TS, TL, N, Cs, QC) ->
     case R of
-	#rr{rate = #rate{interval = I}} ->
-	    N1 = check_rr(I, TS, TL),
-	    check_regulators(Regs, TS, TL, erlang:min(N, N1), Cs);
-	#grp{rate = #rate{interval = I}, latest_dispatch = TLg} ->
-	    N1 = check_rr(I, TS, TLg),
-	    check_regulators(Regs, TS, TL, erlang:min(N, N1), Cs);
-	{#cr{} = CR, Il} ->
-	    #cr{name = Name,
-		value = Val,
-		increment = Ig,
-		rate = #rate{limit = Max}} = CR,
-	    I = cr_increment(Ig, Il),
-	    C1 = check_cr(Val, I, Max),
-	    Cs1 = if C1 == 0 ->
-			  Cs;
-		     true ->
-			  [{Name, I}|Cs]
-		  end,
-	    check_regulators(Regs, TS, TL, erlang:min(C1, N), Cs1)
+        #rr{rate = #rate{interval = I}} ->
+            N1 = check_rr(I, TS, TL),
+            check_regulators(Regs, TS, TL, erlang:min(N, N1), Cs, QC);
+        #grp{rate = #rate{interval = I}, latest_dispatch = TLg} ->
+            N1 = check_rr(I, TS, TLg),
+            check_regulators(Regs, TS, TL, erlang:min(N, N1), Cs, QC);
+        {#cr{} = CR, Il} ->
+            #cr{name = Name,
+                value = Val,
+                increment = Ig,
+                rate = #rate{limit = Max}} = CR,
+            I = cr_increment(Ig, Il),
+            C1 = check_cr(Val, I, Max),
+            {Depleted, Cs1} =
+                if C1 == 0 ->
+                        {true, Cs};
+                   true ->
+                        {QC#q_check.depleted, [{Name, I}|Cs]}
+                end,
+            check_regulators(Regs, TS, TL, erlang:min(C1, N), Cs1,
+                             QC#q_check{depleted = Depleted})
     end;
-check_regulators([], _, _, N, Cs) ->
-    {N, Cs}.
+check_regulators([], _, _, N, Cs, QC) ->
+    QC#q_check{n = N, counters = Cs}.
 
 cr_increment(Ig, undefined) -> Ig;
 cr_increment(_ , Il) when is_integer(Il) -> Il.
@@ -1343,7 +1381,7 @@ restore_counters(Cs, #st{} = S) ->
 
 restore_counter({C, I}, {Revisit, #st{counters = Counters} = S}) ->
     #cr{value = Val, queues = Qs} = CR =
-	lists:keyfind(C, #cr.name, Counters),
+        lists:keyfind(C, #cr.name, Counters),
     CR1 = CR#cr{value = Val - I},
     Counters1 = lists:keyreplace(C, #cr.name, Counters, CR1),
     S1 = S#st{counters = Counters1},
@@ -1353,23 +1391,24 @@ union(L1, L2) ->
     (L1 -- L2) ++ L2.
 
 revisit_queues(Qs, S) ->
-    Expanded = [{QN, Q#queue.latest_dispatch} ||
-                   QN <- Qs,
-                   Q <- S#st.queues,
-                   QN == Q#queue.name
-                       andalso
-                       Q#queue.timer == undefined],
-    [revisit_queue(Q) || {Q,_} <- lists:keysort(2, Expanded)],
+    [revisit_queue(QN) || QN <- Qs,
+                          Q <- S#st.queues,
+                          QN == Q#queue.name
+                              andalso
+                              Q#queue.timer == undefined],
     S.
 
 revisit_queue(Qname) ->
     self() ! {revisit_queue, Qname}.
 
-update_queue(#queue{name = N, type = T} = Q, #st{queues = Qs} = S) ->
+update_queue(Q, S) ->
+    update_queue(Q, #q_check{}, S).
+
+update_queue(#queue{name = N, type = T} = Q, QC, #st{queues = Qs} = S) ->
     Q1 = case T of
              {passive, _} -> Q;
              _ ->
-                 start_timer(Q)
+                 start_timer(QC, Q)
          end,
     S#st{queues = lists:keyreplace(N, #queue.name, Qs, Q1)}.
 
@@ -1382,20 +1421,38 @@ kick_producers(#st{queues = Qs} = S) ->
       end, Qs),
     S.
 
-%% restart_timer(Q) ->
-%%     start_timer(maybe_cancel_timer(Q)).
-
-start_timer(#queue{timer = TRef} = Q) when TRef =/= undefined ->
+start_timer(#q_check{empty = true}, Q) ->
     Q;
-start_timer(#queue{name = Name} = Q) ->
+start_timer(#q_check{depleted = true}, #queue{max_time = MaxT,
+                                              timer = TRef} = Q) ->
+    if is_integer(MaxT), MaxT >= 0, TRef == undefined ->
+            new_timer(calc_timeout(Q), Q);
+       true ->
+            Q
+    end;
+start_timer(_, #queue{timer = TRef} = Q) when TRef =/= undefined ->
+    Q;
+start_timer(_, Q) ->
     case next_time(timestamp(), Q) of
         T when is_integer(T) ->
-            Msg = {check_queue, Name},
-            TRef = do_send_after(T, Msg),
-            Q#queue{timer = TRef};
+            new_timer(T, Q);
         undefined ->
             Q
     end.
+
+calc_timeout(#queue{oldest_job = OJ, max_time = MaxT}) when is_integer(MaxT) ->
+    if is_integer(OJ) ->
+            TS = timestamp(),
+            erlang:max(0, MaxT - ((TS - OJ) div 1000));
+       true ->
+            %% shouldn't happen
+            MaxT
+    end.
+
+new_timer(T, #queue{name = Name} = Q) ->
+    Msg = {check_queue, Name},
+    TRef = do_send_after(T, Msg),
+    Q#queue{timer = TRef}.
 
 do_send_after(T, Msg) when T > 0 ->
     erlang:send_after(T, self(), Msg);
