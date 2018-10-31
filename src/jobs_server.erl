@@ -1573,12 +1573,12 @@ queue_job(TS, From, #queue{max_size = MaxSz} = Q, S) ->
     case {CurSz >= MaxSz, IsOverload} of
         {true, true} ->
             reject(From),
-            {Q, S};
+            {Q, #q_check{}, S};
         {true, false} ->
             case q_timedout(Q) of
                 {[],Q1} ->
                     reject(From),
-                    {Q1, S};
+                    {Q1, #q_check{}, S};
                 {OldJobs, Q1} ->
                     [timeout(J) || J <- OldJobs],
                     job_queued(q_in(TS, From, Q1), CurSz, IsOverload, TS, S)
