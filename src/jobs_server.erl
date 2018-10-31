@@ -1026,17 +1026,18 @@ do_modify_counter_regulator(Name, Opts, #queue{regulators = Regs} = Q) ->
             badarg
     end.
 
-job_queued(#queue{check_counter = Ctr} = Q, PrevSz, TS, S) ->
+job_queued(#queue{check_counter = Ctr} = Q, PrevSz, Overload, TS, S) ->
+    Lim = if Overload -> 100; true -> 10 end,
     case Ctr + 1 of
-	C when C > 10 ->
-	    perform_queue_check(Q, TS, S);
-	C ->
-	    Q1 = Q#queue{check_counter = C},
-	    if PrevSz == 0 ->
-		    perform_queue_check(Q1, TS, S);
-	       true ->
-		    {Q#queue{check_counter = C}, S}
-	    end
+        C when C > Lim ->
+            perform_queue_check(Q, TS, S);
+        C ->
+            Q1 = Q#queue{check_counter = C},
+            if PrevSz == 0 ->
+                    perform_queue_check(Q1, TS, S);
+               true ->
+                    {Q#queue{check_counter = C}, S}
+            end
     end.
 
 check_timedout(#queue{max_time   = undefined} = Q, _) -> Q;
@@ -1056,19 +1057,15 @@ check_timedout(#queue{max_time   = MaxT,
 
 
 perform_queue_check(Q, TS, S) ->
-    Q1 = check_timedout(maybe_cancel_timer(Q), TS),
+    Q1 = check_timedout(maybe_cancel_timer(Q#queue{check_counter = 0}), TS),
     case check_queue(Q1, TS, S) of
-	{0, _, _} ->
-	    {Q1, update_queue(Q1, S)};
-	{N, Counters, Regs} when N > 0 ->
-	    {Nd, _Jobs, Q2} = dispatch_N(N, Counters, TS, Q1, S),
-	    {_Q3, _S3} = update_counters_and_regs(Nd, Counters, Regs, Q2, S);
-	    %% {Q3, S3} = update_regulators(
-	    %% 		 Regs, Q2#queue{latest_dispatch = TS,
-	    %% 				check_counter = 0}, S),
-	    %% update_counters(Jobs, Counters, update_queue(Q3, S3));
-	Bad ->
-	    erlang:error({bad_N, Bad})
+        {0, _, _} ->
+            {Q1, S};
+        {N, Counters, Regs} when N > 0 ->
+            {Nd, _Jobs, Q2} = dispatch_N(N, Counters, TS, Q1, S),
+            {_Q3, _S3} = update_counters_and_regs(Nd, Counters, Regs, Q2, S);
+        Bad ->
+            erlang:error({bad_N, Bad})
     end.
 
 maybe_cancel_timer(#queue{timer = undefined} = Q) ->
@@ -1365,20 +1362,15 @@ revisit_queues(Qs, S) ->
     [revisit_queue(Q) || {Q,_} <- lists:keysort(2, Expanded)],
     S.
 
-get_latest_dispatch(Q, #st{queues = Qs}) ->
-    #queue{latest_dispatch = Tl} =
-	lists:keyfind(Q, #queue.name, Qs),
-    Tl.
-
 revisit_queue(Qname) ->
     self() ! {revisit_queue, Qname}.
 
 update_queue(#queue{name = N, type = T} = Q, #st{queues = Qs} = S) ->
     Q1 = case T of
-	     {passive, _} -> Q;
-	     _ ->
-		 start_timer(Q)
-	 end,
+             {passive, _} -> Q;
+             _ ->
+                 start_timer(Q)
+         end,
     S#st{queues = lists:keyreplace(N, #queue.name, Qs, Q1)}.
 
 kick_producers(#st{queues = Qs} = S) ->
@@ -1520,20 +1512,27 @@ apply_active_modifiers(#rate{preset_limit = Preset,
 
 queue_job(TS, From, #queue{max_size = MaxSz} = Q, S) ->
     CurSz = q_info(length, Q),
-    if CurSz >= MaxSz ->
+    IsOverload = jobs_overloaded(),
+    case {CurSz >= MaxSz, IsOverload} of
+        {true, true} ->
+            reject(From),
+            {Q, S};
+        {true, false} ->
             case q_timedout(Q) of
                 {[],Q1} ->
                     reject(From),
                     {Q1, S};
                 {OldJobs, Q1} ->
                     [timeout(J) || J <- OldJobs],
-                    %% update_queue(q_in(TS, From, Q1), S)
-                    job_queued(q_in(TS, From, Q1), CurSz, TS, S)
+                    job_queued(q_in(TS, From, Q1), CurSz, IsOverload, TS, S)
             end;
-       true ->
-            %% update_queue(q_in(TS, From, Q), S)
-            job_queued(q_in(TS, From, Q), CurSz, TS, S)
+        {false, _} ->
+            job_queued(q_in(TS, From, Q), CurSz, IsOverload, TS, S)
     end.
+
+jobs_overloaded() ->
+    {_, L} = process_info(self(), message_queue_len),
+    L > 100.
 
 do_enqueue(TS, Item, #queue{max_size = MaxSz} = Q, S) ->
     CurSz = q_info(length, Q),
