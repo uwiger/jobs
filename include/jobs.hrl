@@ -167,6 +167,8 @@
         oldest_job           :: integer() | undefined,
         timer,
         check_counter = 0    :: integer(),
+        empty = false        :: boolean(),
+        depleted = false     :: boolean(),
         waiters = []         :: [{pid(), reference()}],
         stateful,
         st
