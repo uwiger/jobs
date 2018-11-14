@@ -49,6 +49,16 @@ Specifically, jobs provides three features:
   which we execute jobs. When the health problem clears, we remove the
   dampener and run at full speed again.
 
+Error recovery
+--------------
+
+The Jobs server is designed to not crash. However, in the unlikely event
+that it should occur (and it has!) Jobs does not automatically restore changes
+that have been effected through the API. This can be enabled, setting the
+Jobs environment variable `auto_restore' to `true', or calling the function
+`jobs_server:auto_restore(true)'. This will tell the jobs_server to remember
+every configuration change and replay them, in order, after a process restart.
+
 Examples
 --------
 

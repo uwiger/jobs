@@ -51,6 +51,7 @@
 	 queue_info/2,
          modify_regulator/4]).
 
+-export([auto_restore/1]).
 
 -export([timestamp/0,
          timestamp_to_datetime/1]).
@@ -267,10 +268,19 @@ start_link() ->
 -spec start_link(ctx_options()) -> {ok, pid()}.
 %%
 start_link(Opts0) when is_list(Opts0) ->
+    ensure_ets(),
     Opts = expand_opts(sort_groups(group_opts(Opts0))),
     gen_server:start_link({local,?MODULE}, ?MODULE, Opts, []).
 
 %% Server-side callbacks and helpers
+
+ensure_ets() ->
+    case ets:info(?MODULE, name) of
+        undefined ->
+            ets:new(?MODULE, [public, named_table, ordered_set]);
+        _ ->
+            true
+    end.
 
 -spec options() -> ctx_options().
 options() ->
@@ -372,12 +382,12 @@ init(Opts) ->
                        N
                end,
     Default = get_first_value(default_queue, Opts, Default0),
-    {ok, set_info(
-	   kick_producers(
-	     lift_counters(S1#st{queues        = Queues,
-				 default_queue = Default,
-				 monitors = ets:new(monitors,[set])})))}.
-
+    {ok, replay(
+           set_info(
+             kick_producers(
+               lift_counters(S1#st{queues        = Queues,
+                                   default_queue = Default,
+                                   monitors = ets:new(monitors,[set])}))))}.
 
 
 init_queues(Qs, S) ->
@@ -716,12 +726,13 @@ i_handle_call({set_modifiers, Modifiers}, _, #st{queues     = Qs,
                              group_rates = GRs1,
                              counters = lists:reverse(Cs1)}),
     {reply, ok, S1};
-i_handle_call({add_queue, Name, Options}, _, #st{queues = Qs} = S) ->
+i_handle_call({add_queue, Name, Options} = Req, _, #st{queues = Qs} = S) ->
     false = get_queue(Name, Qs),
     NewQueues = init_queues([{Name, Options}], S),
+    save_req(Req),
     revisit_queue(Name),
     {reply, ok, lift_counters(S#st{queues = Qs ++ NewQueues})};
-i_handle_call({modify_queue, Name, Options}, _, #st{queues = Qs} = S) ->
+i_handle_call({modify_queue, Name, Options} = Req, _, #st{queues = Qs} = S) ->
     case get_queue(Name, Qs) of
 	false ->
 	    {reply, {error, not_found}, S};
@@ -734,10 +745,11 @@ i_handle_call({modify_queue, Name, Options}, _, #st{queues = Qs} = S) ->
 					       T==undefined ->
 			   Qx#queue{max_time = T}
 		   end, Q, Options),
+            save_req(Req),
 	    revisit_queue(Name),
 	    {reply, ok, update_queue(Q1, S)}
     end;
-i_handle_call({delete_queue, Name}, _, #st{queues = Qs} = S) ->
+i_handle_call({delete_queue, Name} = Req, _, #st{queues = Qs} = S) ->
     case get_queue(Name, Qs) of
         false ->
             {reply, false, S};
@@ -748,6 +760,7 @@ i_handle_call({delete_queue, Name}, _, #st{queues = Qs} = S) ->
 		_ ->
 		    [reject(Client) || {_, Client} <- q_all(Q)]
 	    end,
+            save_req(Req),
             q_delete(Q),
             {reply, true, S#st{queues = lists:keydelete(Name,#queue.name,Qs)}}
     end;
@@ -757,7 +770,7 @@ i_handle_call({queue_info, Name}, _, #st{} = S) ->
     {reply, get_queue_info(Name, S), S};
 i_handle_call({queue_info, Name, Item}, _, #st{} = S) ->
     {reply, get_queue_info(Name, Item, S), S};
-i_handle_call({modify_regulator, Type, Qname, RegName, Opts}, _, S) ->
+i_handle_call({modify_regulator, Type, Qname, RegName, Opts} = Req, _, S) ->
     case get_queue(Qname, S#st.queues) of
         #queue{} = Q ->
             case do_modify_regulator(Type, RegName, Opts, Q) of
@@ -765,24 +778,26 @@ i_handle_call({modify_regulator, Type, Qname, RegName, Opts}, _, S) ->
                     {reply, badarg, S};
                 Q1 ->
                     S1 = update_queue(Q1, S),
+                    save_req(Req),
                     {reply, ok, S1}
             end;
         _ ->
             {reply, badarg, S}
     end;
-i_handle_call({modify_counter, CName, Opts}, _, #st{counters = Cs} = S) ->
+i_handle_call({modify_counter, CName, Opts} = Req, _, #st{counters = Cs} = S) ->
     case get_counter(CName, Cs) of
         false ->
             {reply, badarg, S};
         #cr{} = CR ->
             try CR1 = init_counter(Opts, CR),
+                save_req(Req),
                 {reply, ok, S#st{counters = update_counter(CName,Cs,CR1)}}
             catch
                 error:_ ->
                     {reply, badarg, S}
             end
     end;
-i_handle_call({delete_counter, Name}, _, #st{counters = Cs} = S) ->
+i_handle_call({delete_counter, Name} = Req, _, #st{counters = Cs} = S) ->
     case get_counter(Name, Cs) of
 	false ->
 	    {reply, false, S};
@@ -790,6 +805,7 @@ i_handle_call({delete_counter, Name}, _, #st{counters = Cs} = S) ->
 	    %% The question is whether we should also delete references
 	    %% to the queue? It seems like we should...
 	    Cs1 = lists:keydelete(Name, #cr.name, Cs),
+            save_req(Req),
 	    {reply, true, S#st{counters = Cs1}}
     end;
 i_handle_call({add_counter, Name, Opts}=Req, _, #st{counters = Cs} = S) ->
@@ -798,6 +814,7 @@ i_handle_call({add_counter, Name, Opts}=Req, _, #st{counters = Cs} = S) ->
             try CR = init_counter([{name,Name}|Opts], #cr{name = Name,
                                                           shared = true}),
 		 CR1 = pickup_aliases(S#st.queues, CR),
+                 save_req(Req),
 		 {reply, ok, S#st{counters = Cs ++ [CR1]}}
             catch
                 error:Reason ->
@@ -812,6 +829,7 @@ i_handle_call({add_group_rate, Name, Opts}=Req,_, #st{group_rates = Gs} = S) ->
     case get_group(Name, Gs) of
         false ->
             try GR = init_group(Opts, #grp{name = Name}),
+                save_req(Req),
                 {reply, ok, S#st{group_rates = Gs ++ [GR]}}
             catch
                 error:Reason ->
@@ -822,10 +840,11 @@ i_handle_call({add_group_rate, Name, Opts}=Req,_, #st{group_rates = Gs} = S) ->
         _ ->
             {reply, badarg, S}
     end;
-i_handle_call({modify_group_rate, Name, Opts},_, #st{group_rates = Gs} = S) ->
+i_handle_call({modify_group_rate, Name, Opts} = Req,_, #st{group_rates = Gs} = S) ->
     case get_group(Name, Gs) of
         #grp{} = G ->
             try G1 = init_group(Opts, G),
+                save_req(Req),
                 {reply, ok, S#st{group_rates = update_group(Name,Gs,G1)}}
             catch
                 error:_ ->
@@ -947,6 +966,8 @@ convert_queue({queue,Name,Mod,Type,Group,Regs,MaxT,MaxSz,
 
 %% Internal functions
 
+get_info(all, S) ->
+    [{K, get_info(K, S)} || K <- [queues, group_rates, counters, monitors]];
 get_info(queues, #st{queues = Qs} = S) ->
     [get_queue_info(Name, S)
      || #queue{name = Name} <- Qs];
@@ -1686,9 +1707,9 @@ q_out     (infinity, #queue{mod = Mod} = Q) -> Mod:all  (Q);
 q_out     (N , #queue{mod = Mod} = Q) -> Mod:out     (N, Q).
 q_info    (I , #queue{mod = Mod} = Q) -> Mod:info    (I, Q).
 %%
-q_in(TS, From, #queue{mod = Mod, oldest_job = OJ} = Q) ->
+q_in(TS, From, #queue{mod = Mod, oldest_job = OJ, queued = Qd} = Q) ->
     OJ1 = erlang:min(TS, OJ),    % Works even if OJ==undefined
-    Mod:in(TS, From, Q#queue{oldest_job = OJ1}).
+    Mod:in(TS, From, Q#queue{oldest_job = OJ1, queued = Qd+1}).
 
 %% End queue accessor functions.
 %% ===========================================================
@@ -1804,3 +1825,52 @@ get_first_value(K, [{K, V}|_], _) ->
     V;
 get_first_value(_, [], Default) ->
     Default.
+
+save_req(Req) ->
+    save_req(Req, auto_restore()).
+
+save_req(Req, true) ->
+    Ts = erlang:system_time(),
+    case ets:last(?MODULE) of
+        '$end_of_table' ->
+            ets:insert(?MODULE, {{1,Ts}, Req});
+        {replay,_} ->
+            false;
+        {Last,_} ->
+            ets:insert(?MODULE, {{Last+1, Ts}, Req})
+    end;
+save_req(_, _) ->
+    false.
+
+auto_restore(Flag) when is_boolean(Flag) ->
+    application:set_env(jobs, auto_restore, Flag).
+
+auto_restore() ->
+    case application:get_env(jobs, auto_restore) of
+        {ok, true} ->
+            true;
+        _ ->
+            false
+    end.
+
+replay(S) ->
+    replay(auto_restore(), S).
+
+replay(false, S) ->
+    S;
+replay(true, S) ->
+    ets:insert(?MODULE, {{replay, true}, erlang:system_time()}),
+    try ets:foldl(
+          fun({{replay,true},_}, Sx) ->
+                  throw({done, Sx});
+             ({{I,Ts}, Req}, Sx) when is_integer(I), is_integer(Ts) ->
+                  {reply, _, Sx1} =
+                      i_handle_call(Req, {self(), make_ref()}, Sx),
+                  Sx1
+          end, S, ?MODULE)
+    catch
+        throw:{done, NewS} ->
+            NewS
+    after
+        ets:delete(?MODULE, {replay, true})
+    end.
