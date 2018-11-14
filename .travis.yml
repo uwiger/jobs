@@ -6,6 +6,8 @@ otp_release:
 - 20.3
 - 20.2
 - 20.1
+- 19.3
+- 18.3
 script:
 - rebar3 eunit
 notifications:

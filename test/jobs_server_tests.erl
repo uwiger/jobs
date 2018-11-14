@@ -63,9 +63,9 @@ restart_jobs_server() ->
     await_jobs_server(1000).
 
 test_rate(Q, R) ->
-            T0 = erlang:system_time(millisecond),
+            T0 = jobs_lib:timestamp(),
             Times = [jobs:run(Q, fun() ->
-                                          erlang:system_time(millisecond)
+                                         jobs_lib:timestamp()
                                   end) || _ <- lists:seq(1,10)],
     TimeLimit = 1000 * 10 * (1/R), % in milliseconds
     Actual = (lists:last(Times) - T0),
