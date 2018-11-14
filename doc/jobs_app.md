@@ -25,7 +25,7 @@ recognised configuration parameters.
 
 #### <a name="{config,_Filename}">{config, Filename}</a> ####
 
-Evaluate a file using [`//kernel/file:script/1`](/Users/uwiger/uw/me/kernel/doc/file.md#script-1), treating the data
+Evaluate a file using [file:script/1](https://www.erlang.org/doc/man/file.html#script-1), treating the data
 returned from the script as a list of configuration options.
 
 
@@ -68,6 +68,7 @@ request may spend in the queue. If `undefined`, no limit is imposed.
 of job requests) of the queue. If the queue has reached the maximum length,
 subsequent job requests will be rejected unless it is possible to remove
 enough requests that have exceeded the maximum allowed time in the queue.
+If `undefined`, no limit is imposed.
 
 `{regulators, [{regulator_type(), Opts]}` specifies the regulation
 characteristics of the queue.

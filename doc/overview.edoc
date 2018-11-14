@@ -14,8 +14,8 @@
 %% limitations under the License.
 %%==============================================================================
 
-@copyright 2014 Ulf Wiger
-@version 0.1
+@copyright 2014-2018 Ulf Wiger
+@version 0.9.0
 @title jobs - a Job scheduler for load regulation
 
 @doc

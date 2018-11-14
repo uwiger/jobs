@@ -16,6 +16,16 @@ __Authors:__ : Ulf Wiger ([`ulf@wiger.net`](mailto:ulf@wiger.net)).
 
 
 
+### <a name="type-ctx_options">ctx_options()</a> ###
+
+
+<pre><code>
+ctx_options() = [{_Ctxt::env | opts, _App::user | atom(), [<a href="#type-option">option()</a>]}]
+</code></pre>
+
+
+
+
 ### <a name="type-info_category">info_category()</a> ###
 
 
@@ -38,7 +48,7 @@ queue_name() = any()
 ## Function Index ##
 
 
-<table width="100%" border="1" cellspacing="0" cellpadding="2" summary="function index"><tr><td valign="top"><a href="#add_counter-2">add_counter/2</a></td><td></td></tr><tr><td valign="top"><a href="#add_group_rate-2">add_group_rate/2</a></td><td></td></tr><tr><td valign="top"><a href="#add_queue-2">add_queue/2</a></td><td></td></tr><tr><td valign="top"><a href="#ask-0">ask/0</a></td><td></td></tr><tr><td valign="top"><a href="#ask-1">ask/1</a></td><td></td></tr><tr><td valign="top"><a href="#ask_queue-2">ask_queue/2</a></td><td>Invoke the Q:handle_call/3 function (if it exists).</td></tr><tr><td valign="top"><a href="#code_change-3">code_change/3</a></td><td></td></tr><tr><td valign="top"><a href="#delete_counter-1">delete_counter/1</a></td><td></td></tr><tr><td valign="top"><a href="#delete_group_rate-1">delete_group_rate/1</a></td><td></td></tr><tr><td valign="top"><a href="#delete_queue-1">delete_queue/1</a></td><td></td></tr><tr><td valign="top"><a href="#dequeue-2">dequeue/2</a></td><td></td></tr><tr><td valign="top"><a href="#done-1">done/1</a></td><td></td></tr><tr><td valign="top"><a href="#enqueue-2">enqueue/2</a></td><td></td></tr><tr><td valign="top"><a href="#handle_call-3">handle_call/3</a></td><td></td></tr><tr><td valign="top"><a href="#handle_cast-2">handle_cast/2</a></td><td></td></tr><tr><td valign="top"><a href="#handle_info-2">handle_info/2</a></td><td></td></tr><tr><td valign="top"><a href="#info-1">info/1</a></td><td></td></tr><tr><td valign="top"><a href="#init-1">init/1</a></td><td></td></tr><tr><td valign="top"><a href="#modify_counter-2">modify_counter/2</a></td><td></td></tr><tr><td valign="top"><a href="#modify_group_rate-2">modify_group_rate/2</a></td><td></td></tr><tr><td valign="top"><a href="#modify_queue-2">modify_queue/2</a></td><td></td></tr><tr><td valign="top"><a href="#modify_regulator-4">modify_regulator/4</a></td><td></td></tr><tr><td valign="top"><a href="#queue_info-1">queue_info/1</a></td><td></td></tr><tr><td valign="top"><a href="#queue_info-2">queue_info/2</a></td><td></td></tr><tr><td valign="top"><a href="#run-1">run/1</a></td><td></td></tr><tr><td valign="top"><a href="#run-2">run/2</a></td><td></td></tr><tr><td valign="top"><a href="#set_modifiers-1">set_modifiers/1</a></td><td></td></tr><tr><td valign="top"><a href="#start_link-0">start_link/0</a></td><td></td></tr><tr><td valign="top"><a href="#start_link-1">start_link/1</a></td><td></td></tr><tr><td valign="top"><a href="#terminate-2">terminate/2</a></td><td></td></tr><tr><td valign="top"><a href="#timestamp-0">timestamp/0</a></td><td></td></tr><tr><td valign="top"><a href="#timestamp_to_datetime-1">timestamp_to_datetime/1</a></td><td></td></tr></table>
+<table width="100%" border="1" cellspacing="0" cellpadding="2" summary="function index"><tr><td valign="top"><a href="#add_counter-2">add_counter/2</a></td><td></td></tr><tr><td valign="top"><a href="#add_group_rate-2">add_group_rate/2</a></td><td></td></tr><tr><td valign="top"><a href="#add_queue-2">add_queue/2</a></td><td></td></tr><tr><td valign="top"><a href="#ask-0">ask/0</a></td><td></td></tr><tr><td valign="top"><a href="#ask-1">ask/1</a></td><td></td></tr><tr><td valign="top"><a href="#ask_queue-2">ask_queue/2</a></td><td>Invoke the Q:handle_call/3 function (if it exists).</td></tr><tr><td valign="top"><a href="#auto_restore-1">auto_restore/1</a></td><td></td></tr><tr><td valign="top"><a href="#code_change-3">code_change/3</a></td><td></td></tr><tr><td valign="top"><a href="#delete_counter-1">delete_counter/1</a></td><td></td></tr><tr><td valign="top"><a href="#delete_group_rate-1">delete_group_rate/1</a></td><td></td></tr><tr><td valign="top"><a href="#delete_queue-1">delete_queue/1</a></td><td></td></tr><tr><td valign="top"><a href="#dequeue-2">dequeue/2</a></td><td></td></tr><tr><td valign="top"><a href="#done-1">done/1</a></td><td></td></tr><tr><td valign="top"><a href="#enqueue-2">enqueue/2</a></td><td></td></tr><tr><td valign="top"><a href="#handle_call-3">handle_call/3</a></td><td></td></tr><tr><td valign="top"><a href="#handle_cast-2">handle_cast/2</a></td><td></td></tr><tr><td valign="top"><a href="#handle_info-2">handle_info/2</a></td><td></td></tr><tr><td valign="top"><a href="#info-1">info/1</a></td><td></td></tr><tr><td valign="top"><a href="#init-1">init/1</a></td><td></td></tr><tr><td valign="top"><a href="#modify_counter-2">modify_counter/2</a></td><td></td></tr><tr><td valign="top"><a href="#modify_group_rate-2">modify_group_rate/2</a></td><td></td></tr><tr><td valign="top"><a href="#modify_queue-2">modify_queue/2</a></td><td></td></tr><tr><td valign="top"><a href="#modify_regulator-4">modify_regulator/4</a></td><td></td></tr><tr><td valign="top"><a href="#queue_info-1">queue_info/1</a></td><td></td></tr><tr><td valign="top"><a href="#queue_info-2">queue_info/2</a></td><td></td></tr><tr><td valign="top"><a href="#run-1">run/1</a></td><td></td></tr><tr><td valign="top"><a href="#run-2">run/2</a></td><td></td></tr><tr><td valign="top"><a href="#set_modifiers-1">set_modifiers/1</a></td><td></td></tr><tr><td valign="top"><a href="#start_link-0">start_link/0</a></td><td></td></tr><tr><td valign="top"><a href="#start_link-1">start_link/1</a></td><td></td></tr><tr><td valign="top"><a href="#terminate-2">terminate/2</a></td><td></td></tr><tr><td valign="top"><a href="#timestamp-0">timestamp/0</a></td><td></td></tr><tr><td valign="top"><a href="#timestamp_to_datetime-1">timestamp_to_datetime/1</a></td><td></td></tr></table>
 
 
 <a name="functions"></a>
@@ -62,7 +72,7 @@ queue_name() = any()
 ### add_queue/2 ###
 
 <pre><code>
-add_queue(Name::<a href="#type-queue_name">queue_name()</a>, Options::[<a href="#type-option">option()</a>]) -&gt; ok
+add_queue(Name::<a href="#type-queue_name">queue_name()</a>, Options::<a href="#type-q_opts">q_opts()</a>) -&gt; ok
 </code></pre>
 <br />
 
@@ -100,6 +110,12 @@ Each queue has its own local state, allowing it to collect special statistics.
 This function allows a client to send a request that is handled by a specific
 queue instance, either to pull information from the queue, or to influence its
 state.
+
+<a name="auto_restore-1"></a>
+
+### auto_restore/1 ###
+
+`auto_restore(Flag) -> any()`
 
 <a name="code_change-3"></a>
 
@@ -187,7 +203,7 @@ info(Item::<a href="#type-info_category">info_category()</a>) -&gt; [any()]
 ### init/1 ###
 
 <pre><code>
-init(Opts::[<a href="#type-option">option()</a>]) -&gt; {ok, #st{queues = [#queue{}], group_rates = [#grp{}], counters = [#cr{}], monitors = any(), q_select = atom(), q_select_st = any(), default_queue = any(), info_f = any()}}
+init(Opts::[<a href="#type-option">option()</a>]) -&gt; {ok, #st{queues = [#queue{}] | [tuple()], group_rates = [#grp{}], counters = [#cr{}], monitors = any(), q_select = atom(), q_select_st = any(), default_queue = any(), info_f = any()}}
 </code></pre>
 <br />
 
@@ -208,7 +224,7 @@ init(Opts::[<a href="#type-option">option()</a>]) -&gt; {ok, #st{queues = [#queu
 ### modify_queue/2 ###
 
 <pre><code>
-modify_queue(Name::<a href="#type-queue_name">queue_name()</a>, Options::[<a href="#type-option">option()</a>]) -&gt; ok
+modify_queue(Name::<a href="#type-queue_name">queue_name()</a>, Options::<a href="#type-q_opts">q_opts()</a>) -&gt; ok
 </code></pre>
 <br />
 
@@ -268,7 +284,7 @@ start_link() -&gt; {ok, pid()}
 ### start_link/1 ###
 
 <pre><code>
-start_link(Opts0::[<a href="#type-option">option()</a>]) -&gt; {ok, pid()}
+start_link(Opts0::<a href="#type-ctx_options">ctx_options()</a>) -&gt; {ok, pid()}
 </code></pre>
 <br />
 

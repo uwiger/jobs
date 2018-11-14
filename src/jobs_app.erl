@@ -25,7 +25,7 @@
 %% recognised configuration parameters.
 %%
 %% === {config, Filename} ===
-%% Evaluate a file using {@link //kernel/file:script/1}, treating the data
+%% Evaluate a file using {@link //kernel/file:script/1. file:script/1}, treating the data
 %% returned from the script as a list of configuration options.
 %%
 %% === {queues, QueueOptions} ===

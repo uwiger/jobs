@@ -2,9 +2,9 @@
 
 # jobs - a Job scheduler for load regulation #
 
-Copyright (c) 2014 Ulf Wiger
+Copyright (c) 2014-2018 Ulf Wiger
 
-__Version:__ 0.1
+__Version:__ 0.9.0
 
 JOBS
 ====
@@ -34,6 +34,16 @@ have high CPU load or high memory usage, we apply dampening to the
 scheduling rules: we may lower the concurrency count or the rate at
 which we execute jobs. When the health problem clears, we remove the
 dampener and run at full speed again.
+
+Error recovery
+--------------
+
+The Jobs server is designed to not crash. However, in the unlikely event
+that it should occur (and it has!) Jobs does not automatically restore changes
+that have been effected through the API. This can be enabled, setting the
+Jobs environment variable `auto_restore` to `true`, or calling the function
+`jobs_server:auto_restore(true)`. This will tell the jobs_server to remember
+every configuration change and replay them, in order, after a process restart.
 
 Examples
 --------
@@ -418,17 +428,17 @@ For issues, comments or feedback please [create an issue!] [1]
 
 
 <table width="100%" border="0" summary="list of modules">
-<tr><td><a href="http://github.com/uwiger/jobs/blob/master/doc/jobs.md" class="module">jobs</a></td></tr>
-<tr><td><a href="http://github.com/uwiger/jobs/blob/master/doc/jobs_app.md" class="module">jobs_app</a></td></tr>
-<tr><td><a href="http://github.com/uwiger/jobs/blob/master/doc/jobs_info.md" class="module">jobs_info</a></td></tr>
-<tr><td><a href="http://github.com/uwiger/jobs/blob/master/doc/jobs_lib.md" class="module">jobs_lib</a></td></tr>
-<tr><td><a href="http://github.com/uwiger/jobs/blob/master/doc/jobs_prod_simple.md" class="module">jobs_prod_simple</a></td></tr>
-<tr><td><a href="http://github.com/uwiger/jobs/blob/master/doc/jobs_queue.md" class="module">jobs_queue</a></td></tr>
-<tr><td><a href="http://github.com/uwiger/jobs/blob/master/doc/jobs_queue_list.md" class="module">jobs_queue_list</a></td></tr>
-<tr><td><a href="http://github.com/uwiger/jobs/blob/master/doc/jobs_sampler.md" class="module">jobs_sampler</a></td></tr>
-<tr><td><a href="http://github.com/uwiger/jobs/blob/master/doc/jobs_sampler_cpu.md" class="module">jobs_sampler_cpu</a></td></tr>
-<tr><td><a href="http://github.com/uwiger/jobs/blob/master/doc/jobs_sampler_history.md" class="module">jobs_sampler_history</a></td></tr>
-<tr><td><a href="http://github.com/uwiger/jobs/blob/master/doc/jobs_sampler_mnesia.md" class="module">jobs_sampler_mnesia</a></td></tr>
-<tr><td><a href="http://github.com/uwiger/jobs/blob/master/doc/jobs_server.md" class="module">jobs_server</a></td></tr>
-<tr><td><a href="http://github.com/uwiger/jobs/blob/master/doc/jobs_stateful_simple.md" class="module">jobs_stateful_simple</a></td></tr></table>
+<tr><td><a href="http://github.com/uwiger/jobs/blob/uw-regenerate-docs-0_9_0/doc/jobs.md" class="module">jobs</a></td></tr>
+<tr><td><a href="http://github.com/uwiger/jobs/blob/uw-regenerate-docs-0_9_0/doc/jobs_app.md" class="module">jobs_app</a></td></tr>
+<tr><td><a href="http://github.com/uwiger/jobs/blob/uw-regenerate-docs-0_9_0/doc/jobs_info.md" class="module">jobs_info</a></td></tr>
+<tr><td><a href="http://github.com/uwiger/jobs/blob/uw-regenerate-docs-0_9_0/doc/jobs_lib.md" class="module">jobs_lib</a></td></tr>
+<tr><td><a href="http://github.com/uwiger/jobs/blob/uw-regenerate-docs-0_9_0/doc/jobs_prod_simple.md" class="module">jobs_prod_simple</a></td></tr>
+<tr><td><a href="http://github.com/uwiger/jobs/blob/uw-regenerate-docs-0_9_0/doc/jobs_queue.md" class="module">jobs_queue</a></td></tr>
+<tr><td><a href="http://github.com/uwiger/jobs/blob/uw-regenerate-docs-0_9_0/doc/jobs_queue_list.md" class="module">jobs_queue_list</a></td></tr>
+<tr><td><a href="http://github.com/uwiger/jobs/blob/uw-regenerate-docs-0_9_0/doc/jobs_sampler.md" class="module">jobs_sampler</a></td></tr>
+<tr><td><a href="http://github.com/uwiger/jobs/blob/uw-regenerate-docs-0_9_0/doc/jobs_sampler_cpu.md" class="module">jobs_sampler_cpu</a></td></tr>
+<tr><td><a href="http://github.com/uwiger/jobs/blob/uw-regenerate-docs-0_9_0/doc/jobs_sampler_history.md" class="module">jobs_sampler_history</a></td></tr>
+<tr><td><a href="http://github.com/uwiger/jobs/blob/uw-regenerate-docs-0_9_0/doc/jobs_sampler_mnesia.md" class="module">jobs_sampler_mnesia</a></td></tr>
+<tr><td><a href="http://github.com/uwiger/jobs/blob/uw-regenerate-docs-0_9_0/doc/jobs_server.md" class="module">jobs_server</a></td></tr>
+<tr><td><a href="http://github.com/uwiger/jobs/blob/uw-regenerate-docs-0_9_0/doc/jobs_stateful_simple.md" class="module">jobs_stateful_simple</a></td></tr></table>
 

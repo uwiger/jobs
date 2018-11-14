@@ -81,11 +81,13 @@ should not have to be specified.
 
 * `{max_time, T}`, specifies how long (in ms) a job is allowed to wait
 in the queue before it is automatically rejected.
+If `undefined`, no limit is imposed.
 
 * `{max_size, S}`, indicates how many items can be queued before requests
 are automatically rejected. Strictly speaking, size is whatever the queue
 behavior reports as the size; in the default queue behavior, it is the
 number of elements in the queue.
+If `undefined`, no limit is imposed.
 
 * `{mod, M}`, indicates which queue behavior to use. Default is `jobs_queue`.
 

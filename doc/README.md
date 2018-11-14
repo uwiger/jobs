@@ -2,9 +2,9 @@
 
 # jobs - a Job scheduler for load regulation #
 
-Copyright (c) 2014 Ulf Wiger
+Copyright (c) 2014-2018 Ulf Wiger
 
-__Version:__ 0.1
+__Version:__ 0.9.0
 
 JOBS
 ====
@@ -34,6 +34,16 @@ have high CPU load or high memory usage, we apply dampening to the
 scheduling rules: we may lower the concurrency count or the rate at
 which we execute jobs. When the health problem clears, we remove the
 dampener and run at full speed again.
+
+Error recovery
+--------------
+
+The Jobs server is designed to not crash. However, in the unlikely event
+that it should occur (and it has!) Jobs does not automatically restore changes
+that have been effected through the API. This can be enabled, setting the
+Jobs environment variable `auto_restore` to `true`, or calling the function
+`jobs_server:auto_restore(true)`. This will tell the jobs_server to remember
+every configuration change and replay them, in order, after a process restart.
 
 Examples
 --------
