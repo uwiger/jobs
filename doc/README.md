@@ -231,11 +231,13 @@ ok
         {st,{st,45079}}]}
 
 ```
+
 ---------
 
-##Scenarios and Corresponding Configuration Examples
+## Scenarios and Corresponding Configuration Examples
 
-####EXAMPLE 1:
+#### EXAMPLE 1:
+
 * Add counter regulated queue called ___heavy_crunches___ to limit your cpu intensive code executions to no more than 7 at a time
 
 Configuration:
@@ -260,7 +262,8 @@ jobs:run( heavy_crunches,fun()->my_cpu_intensive_calculation() end)
 
 ```
 
-####EXAMPLE 2:
+#### EXAMPLE 2:
+
 * Add rate regulated queue called ___http_requests___ to ensure that your http server gets no more than 1000 requests per second.
 * Additionally, set the queue size to 10,000 (i.e. to control queue memory consumption)
 
@@ -288,7 +291,8 @@ jobs:run(http_requests,fun()->handle_http_request() end)
 
 NOTE: with the config above, once 10,000 requests accumulates in the queue any incoming requests are dropped on the floor.
 
-####EXAMPLE 3:
+#### EXAMPLE 3:
+
 * HTTP requests will always have a reasonable execution time.  No point in keeping them in the queue past the timeout.
 
 * Let's create ___patient_user_requests___ queue that will keep requests in the queue for up to 10 seconds
@@ -320,7 +324,8 @@ we're likely to maximize the happy users!
 
 NOTE: In order to pace requests from both queues at 1000 per second, use __group_rate__ regulation (EXAMPLE 4)
 
-####EXAMPLE 4:
+#### EXAMPLE 4:
+
 * Rate regulate http requests from multiple queues
 
 Create __group_rates__ regulator called ___http_request_rate___  and assign it to both _impatient_user_requests_ and _patient_user_requests_
@@ -348,24 +353,25 @@ Create __group_rates__ regulator called ___http_request_rate___  and assign it t
 
 ```
 
-####EXAMPLE 5:
+#### EXAMPLE 5:
+
 * Can't afford to drop http requests on the floor once max_size is reached?
 * Implement and use your own queue to persist those unfortunate http requests and serve them eventually
 
 ```erlang
 
- -module(my_persistent_queue).
- -behaviour(jobs_queue).
- -export([  new/2,
-            delete/1,
-            in/3,
-            out/2,
-            peek/1,
-            info/2,
-            all/1]).
+-module(my_persistent_queue).
+-behaviour(jobs_queue).
+-export([  new/2,
+           delete/1,
+           in/3,
+           out/2,
+           peek/1,
+           info/2,
+           all/1]).
 
- ## implementation
- ...
+## implementation
+...
 
 ```
 
@@ -388,11 +394,13 @@ Configuration:
 
 ```
 
-###The use of sampler framework
+### The use of sampler framework
+
 1. Get a sampler running and sending feedback to the jobs server.
 2. Apply its feedback to a regulator limit.
 
-####EXAMPLE 6:
+#### EXAMPLE 6:
+
 * Adjust rate regulator limit on the fly based on the feedback from __jobs_sampler_cpu__ named ___cpu_feedback___
 
 ```erlang
@@ -414,12 +422,14 @@ Configuration:
 
 Prerequisites
 -------------
+
 This application requires 'exprecs'.
 The 'exprecs' module is part of http://github.com/uwiger/parse_trans
 
 Contribute
 ----------
-For issues, comments or feedback please [create an issue!] [1]
+
+For issues, comments or feedback please [create an issue!][1]
 
 [1]: http://github.com/uwiger/jobs/issues "jobs issues"
 
@@ -441,4 +451,3 @@ For issues, comments or feedback please [create an issue!] [1]
 <tr><td><a href="jobs_sampler_mnesia.md" class="module">jobs_sampler_mnesia</a></td></tr>
 <tr><td><a href="jobs_server.md" class="module">jobs_server</a></td></tr>
 <tr><td><a href="jobs_stateful_simple.md" class="module">jobs_stateful_simple</a></td></tr></table>
-
