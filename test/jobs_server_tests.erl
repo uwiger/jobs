@@ -1,5 +1,5 @@
 -module(jobs_server_tests).
-
+-export([start_test_server/1]).
 
 -include_lib("eunit/include/eunit.hrl").
 
@@ -29,6 +29,51 @@ rate_test_() ->
                                       end] end}
       ]}.
 
+link_test_() ->
+    Name = {q, ?LINE},
+    Pid = start_link_pid(),
+    {setup,
+     fun() ->
+             {Pid, start_test_server(false, {Name, [{standard_counter, 1},
+                                                    {link, Pid}]})}
+     end,
+     fun(_) ->
+             stop_server()
+     end,
+     [ fun() ->
+               queue_works(Name)
+       end,
+       fun() ->
+               queue_removed(Pid, Name)
+       end
+     ]}.
+
+start_link_pid() ->
+    Parent = self(),
+    spawn(fun() ->
+                  MRef = monitor(process, Parent),
+                  receive
+                      {'DOWN', MRef, _, _, _} ->
+                          done
+                  end
+          end).
+
+queue_works(Name) ->
+    ok = jobs:run(Name, fun() ->
+                                ok
+                        end).
+
+queue_removed(Pid, Name) ->
+    {queue, _} = jobs:queue_info(Name),
+    MRef = monitor(process, Pid),
+    exit(Pid, kill),
+    receive
+        {'DOWN', MRef, process, Pid, _} ->
+            timer:sleep(500),
+            undefined = jobs:queue_info(Name)
+    after 1000 ->
+            error(timeout)
+    end.
 
 config_test_() ->
     {foreachx,
@@ -266,6 +311,8 @@ start_test_server(Silent, {timeout, T}) ->
 				   ]}
 			      ]}
 		    ]);
+start_test_server(Silent, {Name, [_|_]} = Q) ->
+    start_with_conf(Silent, [{queues, [Q]}]);
 start_test_server(Silent, [_|_] = Rs) ->
     start_with_conf(Silent,
                     [{queues, [{q,

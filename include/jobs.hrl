@@ -166,6 +166,7 @@
         check_interval       :: q_check_interval() | undefined,
         oldest_job           :: integer() | undefined,
         timer,
+        link_ref = undefined :: undefined | reference(),
         check_counter = 0    :: integer(),
         empty = false        :: boolean(),
         depleted = false     :: boolean(),
