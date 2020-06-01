@@ -203,6 +203,30 @@ ok
 
 ```
 
+#### Demo - linked queues ####
+
+```erlang
+3> Pid = spawn(fun() -> receive stop -> ok end end).
+<0.131.0>
+4> jobs:add_queue(q, [{standard_rate,1}, {link, Pid}]).
+ok
+5> jobs:run(q, fun() -> io:fwrite("job: ~p~n", [time()]) end).
+job: {19,33,37}
+ok
+6> exit(Pid, kill).
+
+=INFO REPORT==== 29-May-2020::19:33:45 ===
+    jobs: removing_queue
+    name: q
+    reason: linked
+true
+7> jobs:run(q, fun() -> io:fwrite("job: ~p~n", [time()]) end).
+** exception error: bad argument
+     in function  jobs_server:call/3 (/home/uwiger/uw/jobs/src/jobs_server.erl, line 236)
+     in call from jobs_server:run/2 (/home/uwiger/uw/jobs/src/jobs_server.erl, line 117)
+8> jobs:queue_info(q).
+undefined
+```
 
 #### Demo - queue status ####
 
@@ -428,17 +452,16 @@ For issues, comments or feedback please [create an issue!] [1]
 
 
 <table width="100%" border="0" summary="list of modules">
-<tr><td><a href="http://github.com/uwiger/jobs/blob/master/doc/jobs.md" class="module">jobs</a></td></tr>
-<tr><td><a href="http://github.com/uwiger/jobs/blob/master/doc/jobs_app.md" class="module">jobs_app</a></td></tr>
-<tr><td><a href="http://github.com/uwiger/jobs/blob/master/doc/jobs_info.md" class="module">jobs_info</a></td></tr>
-<tr><td><a href="http://github.com/uwiger/jobs/blob/master/doc/jobs_lib.md" class="module">jobs_lib</a></td></tr>
-<tr><td><a href="http://github.com/uwiger/jobs/blob/master/doc/jobs_prod_simple.md" class="module">jobs_prod_simple</a></td></tr>
-<tr><td><a href="http://github.com/uwiger/jobs/blob/master/doc/jobs_queue.md" class="module">jobs_queue</a></td></tr>
-<tr><td><a href="http://github.com/uwiger/jobs/blob/master/doc/jobs_queue_list.md" class="module">jobs_queue_list</a></td></tr>
-<tr><td><a href="http://github.com/uwiger/jobs/blob/master/doc/jobs_sampler.md" class="module">jobs_sampler</a></td></tr>
-<tr><td><a href="http://github.com/uwiger/jobs/blob/master/doc/jobs_sampler_cpu.md" class="module">jobs_sampler_cpu</a></td></tr>
-<tr><td><a href="http://github.com/uwiger/jobs/blob/master/doc/jobs_sampler_history.md" class="module">jobs_sampler_history</a></td></tr>
-<tr><td><a href="http://github.com/uwiger/jobs/blob/master/doc/jobs_sampler_mnesia.md" class="module">jobs_sampler_mnesia</a></td></tr>
-<tr><td><a href="http://github.com/uwiger/jobs/blob/master/doc/jobs_server.md" class="module">jobs_server</a></td></tr>
-<tr><td><a href="http://github.com/uwiger/jobs/blob/master/doc/jobs_stateful_simple.md" class="module">jobs_stateful_simple</a></td></tr></table>
+<tr><td><a href="http://github.com/uwiger/jobs/blob/uw-link-queue/doc/jobs.md" class="module">jobs</a></td></tr>
+<tr><td><a href="http://github.com/uwiger/jobs/blob/uw-link-queue/doc/jobs_app.md" class="module">jobs_app</a></td></tr>
+<tr><td><a href="http://github.com/uwiger/jobs/blob/uw-link-queue/doc/jobs_info.md" class="module">jobs_info</a></td></tr>
+<tr><td><a href="http://github.com/uwiger/jobs/blob/uw-link-queue/doc/jobs_lib.md" class="module">jobs_lib</a></td></tr>
+<tr><td><a href="http://github.com/uwiger/jobs/blob/uw-link-queue/doc/jobs_prod_simple.md" class="module">jobs_prod_simple</a></td></tr>
+<tr><td><a href="http://github.com/uwiger/jobs/blob/uw-link-queue/doc/jobs_queue.md" class="module">jobs_queue</a></td></tr>
+<tr><td><a href="http://github.com/uwiger/jobs/blob/uw-link-queue/doc/jobs_queue_list.md" class="module">jobs_queue_list</a></td></tr>
+<tr><td><a href="http://github.com/uwiger/jobs/blob/uw-link-queue/doc/jobs_sampler.md" class="module">jobs_sampler</a></td></tr>
+<tr><td><a href="http://github.com/uwiger/jobs/blob/uw-link-queue/doc/jobs_sampler_cpu.md" class="module">jobs_sampler_cpu</a></td></tr>
+<tr><td><a href="http://github.com/uwiger/jobs/blob/uw-link-queue/doc/jobs_sampler_history.md" class="module">jobs_sampler_history</a></td></tr>
+<tr><td><a href="http://github.com/uwiger/jobs/blob/uw-link-queue/doc/jobs_sampler_mnesia.md" class="module">jobs_sampler_mnesia</a></td></tr>
+<tr><td><a href="http://github.com/uwiger/jobs/blob/uw-link-queue/doc/jobs_stateful_simple.md" class="module">jobs_stateful_simple</a></td></tr></table>
 

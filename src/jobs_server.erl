@@ -392,8 +392,8 @@ init(Opts) ->
 
 init_queues(Qs, S) ->
     lists:map(fun(Q) ->
-		      init_queue(Q,S)
-	      end, Qs).
+                      init_queue(Q, S)
+              end, Qs).
 
 init_queue({Name, standard_rate, R}, S) when is_integer(R), R > 0 ->
     init_queue({Name, standard_rate(R)}, S);
@@ -906,7 +906,7 @@ handle_info({'DOWN', Ref, _, Pid, _}, #st{monitors = Mons} = S) ->
 	    {Revisit, S1} = restore_counters(Cs, S),
 	    {noreply, revisit_queues(Revisit, S1)};
 	[] ->
-	    {noreply, S}
+            {noreply, maybe_queue_link_DOWN(Ref, S)}
     end;
 handle_info({revisit_queue, Name}, #st{queues = Qs} = S) ->
     case get_queue(Name, Qs) of
@@ -943,6 +943,29 @@ convert_queues(#st{queues = Qs} = St) ->
 -spec convert_queue(#queue{} | tuple()) -> #queue{}.
 convert_queue(#queue{} = Q) ->
     Q;
+convert_queue({queue,Name,Mod,Type,Group,Regulators,MaxTime,MaxSize,
+               LatestDisp,Approved,Queued,CheckInt,OldestJob,Timer,
+               CheckC,Empty,Depleted,Waiters,Stateful,St}) ->
+    %% Adding `timer_ref` default
+    #queue{name            = Name,
+           mod             = Mod,
+           type            = Type,
+           group           = Group,
+           regulators      = Regulators,
+           max_time        = MaxTime,
+           max_size        = MaxSize,
+           latest_dispatch = LatestDisp,
+           approved        = Approved,
+           queued          = Queued,
+           check_interval  = CheckInt,
+           oldest_job      = OldestJob,
+           timer           = Timer,
+           check_counter   = CheckC,
+           empty           = Empty,
+           depleted        = Depleted,
+           waiters         = Waiters,
+           stateful        = Stateful,
+           st              = St};
 convert_queue({queue,Name,Mod,Type,Group,Regs,MaxT,MaxSz,
               TL,Approved,Queued,CheckI,Oldest,Timer,CheckC,Waiters,
                Stateful,St}) ->
@@ -1642,18 +1665,21 @@ select_queue(Type, _, #st{q_select = M, q_select_st = MS, info_f = I} = S) ->
 %% The callback module must implement the functions below.
 %%
 q_new(Opts) ->
-    [Name, Mod, Type, Stateful, MaxTime, MaxSize] =
+    [Name, Mod, Type, Stateful, MaxTime, MaxSize, Link] =
         [get_value(K, Opts, Def) || {K, Def} <- [{name, undefined},
                                                  {mod , jobs_queue},
 						 {type, fifo},
 						 {stateful, undefined},
                                                  {max_time, undefined},
-                                                 {max_size, undefined}]],
+                                                 {max_size, undefined},
+                                                 {link, undefined}]],
+    LinkRef = link_ref(Link),
     Q0 = #queue{name = Name,
-		mod = Mod,
-		type = Type,
-		max_time = MaxTime,
-		max_size = MaxSize},
+                mod = Mod,
+                type = Type,
+                link_ref = LinkRef,
+                max_time = MaxTime,
+                max_size = MaxSize},
     Q1 = Q0#queue{stateful = init_stateful(Stateful, Q0)},
     case Type of
 	{producer, F} ->
@@ -1663,6 +1689,11 @@ q_new(Opts) ->
 	_ ->
 	    #queue{} = q_new(Opts, Q1, Mod)
     end.
+
+link_ref(undefined) ->
+    undefined;
+link_ref(Pid) when is_pid(Pid) ->
+    erlang:monitor(process, Pid).
 
 q_new(Options, Q, Mod) ->
     Mod:new(queue_options(Options, Q), Q).
@@ -1873,4 +1904,15 @@ replay(true, S) ->
             NewS
     after
         ets:delete(?MODULE, {replay, true})
+    end.
+
+maybe_queue_link_DOWN(Ref, #st{queues = Qs} = S) ->
+    case lists:keyfind(Ref, #queue.link_ref, Qs) of
+        #queue{name = Name} ->
+            error_logger:info_report([{jobs, removing_queue},
+                                      {name, Name},
+                                      {reason, linked}]),
+            S#st{queues = lists:keydelete(Ref, #queue.link_ref, Qs)};
+        false ->
+            S
     end.

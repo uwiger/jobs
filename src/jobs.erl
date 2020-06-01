@@ -167,6 +167,14 @@ job_info({_, Opaque}) ->
 %% number of elements in the queue.
 %%  If `undefined', no limit is imposed.
 %%
+%% * `{link, undefined | pid()}', links the queue to a process. The queue
+%%   will automatically be removed if the process dies. Default is `undefined',
+%%   which means that the queue will not be linked. An exception will be raised
+%%   if the option value is anything other than `undefined' or a valid pid.
+%%   Note that if the referenced pid is not alive at queue creation time, the
+%%   queue will be removed directly afterwards. An info report will be issued
+%%   when the queue is removed.
+%%
 %% * `{mod, M}', indicates which queue behavior to use. Default is `jobs_queue'.
 %%
 %% In addition, some 'abbreviated' options are supported:
