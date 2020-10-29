@@ -311,7 +311,7 @@ start_test_server(Silent, {timeout, T}) ->
 				   ]}
 			      ]}
 		    ]);
-start_test_server(Silent, {Name, [_|_]} = Q) ->
+start_test_server(Silent, {_Name, [_|_]} = Q) ->
     start_with_conf(Silent, [{queues, [Q]}]);
 start_test_server(Silent, [_|_] = Rs) ->
     start_with_conf(Silent,
