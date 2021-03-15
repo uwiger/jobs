@@ -10,11 +10,16 @@ compile:
 test: all
 	$(REBAR3) eunit
 
+ci: test xref dialyzer
+
 clean:
 	$(REBAR3) clean
 
 doc:
 	$(REBAR3) doc
+
+xref:
+	$(REBAR3) xref
 
 dialyzer:
 	$(REBAR3) dialyzer
