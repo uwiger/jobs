@@ -10,9 +10,8 @@ otp_release:
 - 21.2
 - 21.1
 - 21.0
-- 20.3
 script:
-- rebar3 eunit
+- make ci
 notifications:
   email:
     on_success: never
