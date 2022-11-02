@@ -6,6 +6,8 @@ Copyright (c) 2014-2018 Ulf Wiger
 
 __Version:__ 0.9.0
 
+[![Build Status](https://github.com/uwiger/jobs/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/uwiger/jobs/actions/workflows/ci.yml)
+
 JOBS
 ====
 

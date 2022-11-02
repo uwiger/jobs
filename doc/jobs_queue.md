@@ -2,6 +2,7 @@
 
 # Module jobs_queue #
 * [Description](#description)
+* [Data Types](#types)
 * [Function Index](#index)
 * [Function Details](#functions)
 
@@ -15,7 +16,42 @@ __Authors:__ : Ulf Wiger ([`ulf@wiger.net`](mailto:ulf@wiger.net)).
 
 ## Description ##
 This module implements the default queue behaviour for JOBS, and also
-specifies the behaviour itself.<a name="index"></a>
+specifies the behaviour itself.
+<a name="types"></a>
+
+## Data Types ##
+
+
+
+
+### <a name="type-entry">entry()</a> ###
+
+
+<pre><code>
+entry() = {<a href="#type-timestamp">timestamp()</a>, <a href="#type-job">job()</a>}
+</code></pre>
+
+
+
+
+### <a name="type-info_item">info_item()</a> ###
+
+
+<pre><code>
+info_item() = max_time | oldest_job | length
+</code></pre>
+
+
+
+
+### <a name="type-job">job()</a> ###
+
+
+<pre><code>
+job() = {pid(), reference()}
+</code></pre>
+
+<a name="index"></a>
 
 ## Function Index ##
 
@@ -32,7 +68,7 @@ specifies the behaviour itself.<a name="index"></a>
 ### all/1 ###
 
 <pre><code>
-all(Queue::#queue{}) -&gt; [JobEntry]
+all(Queue::#queue{}) -&gt; [<a href="#type-entry">entry()</a>]
 </code></pre>
 <br />
 
@@ -69,7 +105,7 @@ to get rid of it.
 ### in/3 ###
 
 <pre><code>
-in(TS::Timestamp, Job, Queue::#queue{}) -&gt; #queue{}
+in(TS::<a href="#type-timestamp">timestamp()</a>, Job::<a href="#type-job">job()</a>, Queue::#queue{}) -&gt; #queue{}
 </code></pre>
 <br />
 
@@ -87,10 +123,9 @@ fairly trivial case of the `in/3` function, the oldest job would be
 ### info/2 ###
 
 <pre><code>
-info(X1::Item, Queue::#queue{}) -&gt; Info
+info(X1::<a href="#type-info_item">info_item()</a>, Queue::#queue{}) -&gt; any()
 </code></pre>
-
-<ul class="definitions"><li><code>Item = max_time | oldest_job | length</code></li></ul>
+<br />
 
 Return information about the queue.
 
@@ -127,7 +162,7 @@ used to keep track of the queue data structure.
 ### out/2 ###
 
 <pre><code>
-out(N::integer(), Queue::#queue{}) -&gt; {[Entry], #queue{}}
+out(N::integer(), Queue::#queue{}) -&gt; {[<a href="#type-entry">entry()</a>], #queue{}}
 </code></pre>
 <br />
 
@@ -141,7 +176,7 @@ especially if the queue becomes empty.
 ### peek/1 ###
 
 <pre><code>
-peek(Queue::#queue{}) -&gt; JobEntry | undefined
+peek(Queue::#queue{}) -&gt; <a href="#type-entry">entry()</a>
 </code></pre>
 <br />
 
@@ -160,7 +195,7 @@ A representation of a queue which can be inspected
 ### timedout/1 ###
 
 <pre><code>
-timedout(Queue::#queue{}) -&gt; {[Entry], #queue{}}
+timedout(Queue::#queue{}) -&gt; {[<a href="#type-entry">entry()</a>], #queue{}}
 </code></pre>
 <br />
 
