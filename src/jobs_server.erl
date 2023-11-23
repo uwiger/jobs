@@ -162,7 +162,7 @@ dequeue(Type, N) when N==infinity; is_integer(N), N > 0 ->
 add_queue(Name, Options) ->
     call(?SERVER, {add_queue, Name, Options}).
 
--spec modify_queue(queue_name(), q_opts()) -> ok.
+-spec modify_queue(queue_name(), q_opts()) -> ok | {error, any()}.
 %%
 modify_queue(Name, Options) ->
     call(?SERVER, {modify_queue, Name, Options}).
