@@ -99,7 +99,7 @@ ask(Type::<a href="#type-job_class">job_class()</a>) -&gt; {ok, <a href="#type-r
 ### ask_queue/2 ###
 
 <pre><code>
-ask_queue(QName, Request) -&gt; Reply
+ask_queue(QName::<a href="#type-queue_name">queue_name()</a>, Request::any()) -&gt; any()
 </code></pre>
 <br />
 

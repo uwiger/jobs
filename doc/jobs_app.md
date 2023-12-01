@@ -25,7 +25,7 @@ recognised configuration parameters.
 
 #### <a name="{config,_Filename}">{config, Filename}</a> ####
 
-Evaluate a file using [file:script/1](https://www.erlang.org/doc/man/file.html#script-1), treating the data
+Evaluate a file using [file:script/1](https://www.erlang.org/doc/man/kernel/doc/file.md#script-1), treating the data
 returned from the script as a list of configuration options.
 
 

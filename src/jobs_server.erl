@@ -86,12 +86,6 @@
 
 -define(SERVER, ?MODULE).
 
--ifdef(OTP_RELEASE).
--define(WITH_STACKTRACE(T, R, S), T:R:S ->).
--else.
--define(WITH_STACKTRACE(T, R, S), T:R -> S = erlang:get_stacktrace(),).
--endif.
-
 -type queue_name() :: any().
 -type info_category() :: queues | group_rates | counters.
 
@@ -641,7 +635,7 @@ handle_call(Req, From, S) ->
         {reply, R, #st{} = S1} ->
             {reply, R, set_info(S1)}
     catch
-        ?WITH_STACKTRACE(error, Reason, Stacktrace)
+        error:Reason:Stacktrace ->
 	    io:fwrite("caught Reason = ~p~n", [{Reason, Stacktrace}]),
             error_report([{error, Reason},
                           {request, Req},
